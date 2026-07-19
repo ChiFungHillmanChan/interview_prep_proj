@@ -192,11 +192,11 @@ class DocumentParser:
         if not text:
             return ""
         
-        # Normalize whitespace
-        text = re.sub(r'\s+', ' ', text.strip())
-        
-        # Remove excessive line breaks but preserve paragraph breaks
-        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+        # Normalize each line without erasing section boundaries used by the
+        # deterministic Career Memory fallback.
+        lines = [re.sub(r'[\t\r\f\v ]+', ' ', line).strip() for line in text.split('\n')]
+        text = '\n'.join(lines).strip()
+        text = re.sub(r'\n{3,}', '\n\n', text)
         
         # Enforce length limit
         if len(text) > max_length:
@@ -233,9 +233,13 @@ class DocumentParser:
         file_name = uploaded_file.name.lower()
         
         if file_name.endswith('.pdf'):
+            if not file_content.startswith(b'%PDF'):
+                raise ValidationError('The uploaded file does not contain a valid PDF signature')
             raw_text = cls.parse_pdf(file_content)
             file_type = 'PDF'
         elif file_name.endswith('.docx'):
+            if not file_content.startswith(b'PK'):
+                raise ValidationError('The uploaded file does not contain a valid DOCX signature')
             raw_text = cls.parse_docx(file_content)
             file_type = 'DOCX'
         else:

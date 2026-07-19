@@ -1,0 +1,21 @@
+{% extends 'prep_app/base.html' %}
+{% block title %}Privacy & Data - AceInterview{% endblock %}
+{% block content %}
+<main class="min-h-screen bg-gray-50 px-6 py-14">
+  <div class="mx-auto max-w-4xl space-y-8">
+    <div><a href="{% url 'coach_dashboard' %}" class="text-sm font-semibold text-blue-600">← Career Memory</a><h1 class="mt-3 text-3xl font-bold text-gray-900">Privacy and data controls</h1></div>
+    <section class="rounded-xl bg-white p-7 shadow-sm ring-1 ring-gray-100">
+      <h2 class="text-xl font-bold">Export your data</h2><p class="mt-2 text-gray-600">Download profiles, Career Memory, complete answers, assessments, and resume versions as JSON.</p>
+      <a class="mt-4 inline-block rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white" href="{% url 'data_export' %}">Download my data</a>
+    </section>
+    <section class="rounded-xl bg-white p-7 shadow-sm ring-1 ring-gray-100">
+      <h2 class="text-xl font-bold">CV imports</h2><p class="mt-2 text-sm text-gray-500">AceInterview does not retain uploaded binaries. Delete parsed text here; optionally delete the memories created from it.</p>
+      <div class="mt-5 space-y-4">{% for document in documents %}<form method="post" action="{% url 'candidate_document_delete' document.id %}" class="rounded-lg border p-4">{% csrf_token %}<strong>{{ document.original_name }}</strong><p class="text-xs text-gray-500">{{ document.file_type }} · {{ document.size_bytes }} bytes</p><label class="mt-3 flex gap-2 text-sm"><input type="checkbox" name="delete_memories"> Also delete memories extracted from this CV</label><button class="mt-3 text-sm font-semibold text-red-600" type="submit">Delete import</button></form>{% empty %}<p class="text-gray-500">No CV imports retained.</p>{% endfor %}</div>
+    </section>
+    <section class="rounded-xl border border-red-200 bg-white p-7">
+      <h2 class="text-xl font-bold">Delete account</h2><p class="mt-2 text-gray-600">This permanently deletes your account and all Career Memory, answers, imports, and resume versions.</p>
+      <form method="post" action="{% url 'account_delete' %}" class="mt-5 max-w-md space-y-4">{% csrf_token %}<label class="text-sm font-semibold">Confirm your password</label>{{ account_delete_form.password }}<button class="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white" type="submit">Permanently delete account</button></form>
+    </section>
+  </div>
+</main>
+{% endblock %}

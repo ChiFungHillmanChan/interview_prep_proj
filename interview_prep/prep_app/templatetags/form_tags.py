@@ -5,3 +5,8 @@ register = template.Library()
 @register.filter(name='addclass')
 def addclass(value, arg):
     return value.as_widget(attrs={'class': arg})
+
+
+@register.filter(name='humanize_key')
+def humanize_key(value):
+    return str(value).replace('_', ' ').title()

@@ -6,15 +6,7 @@ except ImportError:
     from .mock_genai import genai
 import io
 import PyPDF2
-import subprocess
-import tempfile
 
-# Import AI Resume Builder views
-from .ai_resume_views import (
-    ai_resume_upload, ai_resume_editor, ai_resume_download,
-    ai_resume_export_pdf, ai_resume_export_docx, ai_resume_refine,
-    ai_resume_save, ai_resume_clear_session
-)
 import json 
 import os
 import requests
@@ -543,168 +535,11 @@ def coding_assessment(request, question_id):
 @login_required
 @csrf_protect
 def run_code(request, question_id):
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
-    
-    try:
-        data = json.loads(request.body)
-        code = data.get('code')
-        language = data.get('language', 'python')
-        
-        # Get the question and test cases
-        question = get_object_or_404(Question, id=question_id)
-        test_cases = question.test_cases
-        title = question.title
-        
-        # Generate a filename based on the question title and language
-        function_name = title.replace(" ", "_").lower()
-        sanitized_title = ''.join(c for c in function_name if c.isalnum() or c == '_')
-        
-        # Define file extensions and run commands for each language
-        language_configs = {
-            'python': {
-                'extension': '.py',
-                'command': ['python'],
-                'function_template': 'result = {}({})',
-            },
-            'java': {
-                'extension': '.java',
-                'command': ['java'],
-                'function_template': 'result = solution.{}({})',
-            },
-            'javascript': {
-                'extension': '.js',
-                'command': ['node'],
-                'function_template': 'result = {}({})',
-            },
-            'cpp': {
-                'extension': '.cpp',
-                'command': ['g++', '-o'],
-                'function_template': 'result = {}({})',
-            }
-        }
-        
-        if language not in language_configs:
-            return JsonResponse({'status': 'error', 'message': 'Unsupported language'}, status=400)
-        
-        temp_dir = '/Users/hillmanchan/Desktop/interview_prep_proj/interview_prep/static/temp_files'
-        config = language_configs[language]
-        file_name = os.path.join(temp_dir, f"{sanitized_title}{config['extension']}")
-        
-        # Extract function name from the initial code template based on language
-        initial_code_dict = json.loads(question.initial_code) if isinstance(question.initial_code, str) else question.initial_code
-        function_pattern = {
-            'python': r'def\s+(\w+)\s*\(',
-            'java': r'public\s+\w+\s+(\w+)\s*\(',
-            'javascript': r'function\s+(\w+)\s*\(',
-            'cpp': r'\w+\s+(\w+)\s*\('
-        }
-        
-        match = re.search(function_pattern[language], initial_code_dict[language])
-        if match:
-            actual_function_name = match.group(1)
-        else:
-            return JsonResponse({'status': 'error', 'message': 'Could not extract function name'}, status=400)
-        
-        # Write code to language-specific file
-        with open(file_name, 'w') as f:
-            if language == 'java':
-                f.write('public class Solution {\n')
-                f.write(code)
-                f.write('\n    public static void main(String[] args) {\n')
-                f.write('        Solution solution = new Solution();\n')
-
-            elif language == 'javascript':
-                f.write(code)
-                f.write('\n\nconst results = [];\n')
-
-            elif language == 'cpp':
-                f.write('#include <iostream>\n#include <vector>\n#include <string>\n#include <json/json.h>\n')
-                f.write(code)
-                f.write('\n\nint main() {\n')
-                
-            else:  # python
-                f.write(code)
-                f.write('\n\n# Test runner\n')
-                f.write('import json\n')
-                f.write('results = []\n')
-            
-            # Add test cases according to language
-            for i, test_case in enumerate(test_cases):
-                test_input = test_case.get('input', {})
-                expected_output = test_case.get("expected", "No expected output")
-                
-                if isinstance(test_input, dict) and len(test_input) > 1:
-                    params_str = ', '.join([f"{k}={repr(v)}" for k, v in test_input.items()])
-                else:
-                    params_str = json.dumps(test_input)
-                
-                if language == 'python':
-                    f.write(f'\ntry:\n')
-                    f.write(f'    result = {actual_function_name}({params_str})\n')
-                    f.write(f'    results.append({{"index": {i}, "actual_output": result, "expected": {json.dumps(expected_output)}, "passed": result == {json.dumps(expected_output)}}})\n')
-                    f.write('except Exception as e:\n')
-                    f.write(f'    results.append({{"index": {i}, "actual_output": str(e), "expected": {json.dumps(expected_output)}, "passed": False}})\n')
-                
-                # Add language-specific test runners here for other languages...
-                # Modify the language handling part in run_code function:
-                elif language == 'java':
-                    write_java_test_file(file_name, code, test_cases, actual_function_name)
-            # Close the main function/class for compiled languages
-            if language == 'java':
-                f.write('    }\n}')
-            elif language == 'cpp':
-                f.write('    return 0;\n}')
-            
-            if language == 'python':
-                pass
-        
-        # Execute the code based on language
-        try:
-            if language == 'python':
-                process = subprocess.run(
-                    ['python', file_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                
-                if process.returncode == 0:
-                    test_results = json.loads(process.stdout)
-                    all_passed = all(result['passed'] for result in test_results)
-                    return JsonResponse({
-                        'status': 'success',
-                        'test_results': test_results,
-                        'all_passed': all_passed
-                    })
-                else:
-                    return JsonResponse({
-                        'status': 'error',
-                        'message': f'Execution error: {process.stderr}'
-                    })
-            else:
-                # Add execution logic for other languages here
-                return JsonResponse({
-                    'status': 'error',
-                    'message': f'Language {language} execution not implemented yet'
-                })
-                
-        except subprocess.TimeoutExpired:
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Code execution timed out'
-            })
-        except Exception as e:
-            return JsonResponse({
-                'status': 'error',
-                'message': f'Error processing request: {str(e)}'
-            }, status=400)
-            
-    except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'message': f'Error processing request: {str(e)}'
-        }, status=400)
+    """Retained as a safe compatibility target; execution requires a real sandbox."""
+    return JsonResponse({
+        'status': 'disabled',
+        'message': 'Code execution is disabled until an isolated sandbox is available.',
+    }, status=410)
 
     
 @login_required

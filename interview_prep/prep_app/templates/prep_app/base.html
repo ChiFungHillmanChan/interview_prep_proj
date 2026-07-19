@@ -9,8 +9,8 @@
     <title>AceInterview - Professional Interview Preparation</title>
     <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet"> -->
     <link rel="stylesheet" href="/static/css/base.css" />
+    <link rel="stylesheet" href="/static/css/tailwind.css" />
     {% block css %}{% endblock %}
-    <script src="https://cdn.tailwindcss.com"></script>
   </head>
 
   <body class="min-h-screen flex flex-col">
@@ -31,6 +31,11 @@
               href="{% url 'cv_analysis' %}"
               class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if request.resolver_match.url_name == 'cv_analysis' %}text-blue-600 hover:text-blue-600{% endif %}"
               >Resume Analysis</a
+            >
+            <a
+              href="{% url 'coach_dashboard' %}"
+              class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if 'coach' in request.resolver_match.url_name %}text-blue-600 hover:text-blue-600{% endif %}"
+              >AI Interview Coach</a
             >
             <a
               href="{% url 'ai_resume_upload' %}"
@@ -125,7 +130,7 @@
                 </a>
 
                 <a
-                  href="#"
+                  href="{% url 'privacy_center' %}"
                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   <svg
@@ -147,7 +152,7 @@
                       d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                     />
                   </svg>
-                  Settings
+                  Privacy & data
                 </a>
 
                 <form action="{% url 'logout' %}" method="post" class="block">
@@ -184,30 +189,34 @@
             {% endif %}
           </div>
 
-          <button
-            class="md:hidden"
-            x-data="{ open: false }"
-            @click="open = !open"
-          >
-            <svg
-              class="w-6 h-6 text-gray-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-          </button>
+          <details class="relative md:hidden">
+            <summary class="cursor-pointer list-none rounded p-2 text-gray-600" aria-label="Open navigation menu">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </summary>
+            <div class="absolute right-0 mt-3 w-64 rounded-xl bg-white p-3 shadow-xl ring-1 ring-gray-200">
+              <a class="block rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50" href="{% url 'coach_dashboard' %}">Interview coach</a>
+              <a class="block rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50" href="{% url 'cv_import' %}">Import CV</a>
+              <a class="block rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50" href="{% url 'resume_builder' %}">Resume builder</a>
+              <a class="block rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50" href="{% url 'privacy_center' %}">Privacy & data</a>
+              {% if user.is_authenticated %}<form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="block w-full rounded-lg px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50" type="submit">Log out</button></form>{% else %}<a class="block rounded-lg px-4 py-3 text-sm font-medium text-blue-700" href="{% url 'login' %}">Log in</a>{% endif %}
+            </div>
+          </details>
         </div>
       </div>
     </nav>
 
-    <main class="flex-grow pt-20">{% block content %} {% endblock %}</main>
+    <main class="flex-grow pt-20">
+      {% if messages %}
+        <div class="fixed right-5 top-24 z-50 w-full max-w-sm space-y-3 px-4">
+          {% for message in messages %}
+            <div class="rounded-lg border px-4 py-3 text-sm shadow-lg {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-blue-200 bg-white text-gray-700{% endif %}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% block content %} {% endblock %}
+    </main>
 
     <!-- Footer -->
     <footer class="bg-gray-50">

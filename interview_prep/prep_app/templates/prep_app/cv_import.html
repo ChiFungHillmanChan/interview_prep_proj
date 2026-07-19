@@ -1,0 +1,23 @@
+{% extends 'prep_app/base.html' %}
+{% block title %}Import CV - AceInterview{% endblock %}
+{% block content %}
+<main class="min-h-screen bg-gray-50 px-6 py-14">
+  <div class="mx-auto max-w-2xl">
+    <a href="{% url 'coach_dashboard' %}" class="text-sm font-semibold text-blue-600">← Career Memory</a>
+    <section class="mt-5 rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-100">
+      <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">CV import</p>
+      <h1 class="mt-2 text-3xl font-bold text-gray-900">Turn your CV into reviewable memory</h1>
+      <p class="mt-3 text-gray-600">PDF and DOCX are parsed into personal details, skills, work, projects, education, achievements, certifications, and languages. Every item starts unconfirmed.</p>
+      <form method="post" enctype="multipart/form-data" class="mt-7 space-y-4">
+        {% csrf_token %}
+        <label class="block text-sm font-semibold text-gray-800" for="{{ form.cv_file.id_for_label }}">Choose your CV</label>
+        {{ form.cv_file }}
+        {% if form.cv_file.errors %}<p class="text-sm text-red-600">{{ form.cv_file.errors|striptags }}</p>{% endif %}
+        <p class="text-xs text-gray-500">{{ form.cv_file.help_text }}</p>
+        <button class="w-full rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700" type="submit">Import for review</button>
+      </form>
+      <div class="mt-6 rounded-lg bg-blue-50 p-4 text-sm text-blue-900"><strong>Privacy:</strong> the original uploaded binary is not stored. Parsed text remains private until you delete the import; extracted claims are never confirmed automatically.</div>
+    </section>
+  </div>
+</main>
+{% endblock %}
