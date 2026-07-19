@@ -1,0 +1,206 @@
+{% extends 'prep_app/base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block title %}AI Resume Builder - Upload{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/ai_resume_upload.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="ai-resume-upload-container">
+    <div class="upload-header">
+        <h1>AI Resume Builder</h1>
+        <p class="upload-subtitle">Transform your resume with AI-powered optimization</p>
+        <div class="progress-steps">
+            <div class="step active">1. Upload</div>
+            <div class="step">2. Edit</div>
+            <div class="step">3. Download</div>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="upload-form" id="ai-resume-upload-form">
+        {% csrf_token %}
+        
+        <div class="form-section">
+            <h2>Job Information</h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="{{ form.job_name.id_for_label }}">Job Name</label>
+                    {{ form.job_name|add_class:"form-input" }}
+                    <div class="help-text">Short descriptive name for this job application</div>
+                    {% if form.job_name.errors %}
+                        <div class="error-text">{{ form.job_name.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.job_title.id_for_label }}">Job Title</label>
+                    {{ form.job_title|add_class:"form-input" }}
+                    <div class="help-text">The exact job title from the posting</div>
+                    {% if form.job_title.errors %}
+                        <div class="error-text">{{ form.job_title.errors.0 }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.job_description.id_for_label }}">Full Job Description</label>
+                {{ form.job_description|add_class:"form-textarea" }}
+                <div class="help-text">Paste the complete job posting including requirements, responsibilities, and qualifications</div>
+                {% if form.job_description.errors %}
+                    <div class="error-text">{{ form.job_description.errors.0 }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h2>Resume Upload</h2>
+            
+            <div class="form-group">
+                <label for="{{ form.resume_file.id_for_label }}">Resume File</label>
+                <div class="file-upload-area" id="file-upload-area">
+                    <div class="file-upload-content">
+                        <div class="file-upload-icon">📄</div>
+                        <div class="file-upload-text">
+                            <strong>Click to upload</strong> or drag and drop your resume
+                        </div>
+                        <div class="file-upload-help">PDF or DOCX files only (max 10MB)</div>
+                    </div>
+                    {{ form.resume_file|add_class:"file-input" }}
+                </div>
+                {% if form.resume_file.errors %}
+                    <div class="error-text">{{ form.resume_file.errors.0 }}</div>
+                {% endif %}
+                
+                <div class="file-info" id="file-info" style="display: none;">
+                    <div class="file-name"></div>
+                    <div class="file-size"></div>
+                    <button type="button" class="file-remove" onclick="removeFile()">Remove</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.extra_notes.id_for_label }}">Extra Notes (Optional)</label>
+                {{ form.extra_notes|add_class:"form-textarea" }}
+                <div class="help-text">Additional information about your experience, achievements, or specific requirements not in your resume</div>
+                {% if form.extra_notes.errors %}
+                    <div class="error-text">{{ form.extra_notes.errors.0 }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Preview sections - shown after file upload and processing -->
+        <div class="preview-section" id="preview-section" style="display: none;">
+            <h2>Document Preview</h2>
+            <p class="preview-help">Review the extracted text to ensure it's accurate before continuing</p>
+            
+            <div class="preview-row">
+                <div class="preview-column">
+                    <h3>Job Description</h3>
+                    <div class="preview-content" id="jd-preview">
+                        <!-- Job description preview will be inserted here -->
+                    </div>
+                </div>
+                
+                <div class="preview-column">
+                    <h3>Resume Text ({{ resume_file_type|default:"" }})</h3>
+                    <div class="preview-content" id="resume-preview">
+                        <!-- Resume text preview will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processing indicator -->
+        <div class="processing-indicator" id="processing-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <div class="processing-text">Processing your resume...</div>
+        </div>
+
+        <!-- Form actions -->
+        <div class="form-actions">
+            <button type="button" class="btn btn-secondary" onclick="window.history.back()">
+                ← Back
+            </button>
+            <button type="submit" class="btn btn-primary" id="continue-btn">
+                Continue to Editor →
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Error modal for file validation -->
+<div class="modal" id="error-modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Upload Error</h3>
+            <button type="button" class="modal-close" onclick="closeErrorModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="error-message"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" onclick="closeErrorModal()">OK</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/ai_resume_upload.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize upload handler
+    const uploader = new AIResumeUploader();
+    
+    // Show preview if we have processed data
+    {% if extracted_text %}
+        document.getElementById('preview-section').style.display = 'block';
+        document.getElementById('jd-preview').textContent = `{{ job_description|slice:":500" }}{{ job_description|length|add:"-500"|stringformat:"d"|add:"..."|conditional:""|slice:"500:" }}`;
+        document.getElementById('resume-preview').textContent = `{{ extracted_text|slice:":500" }}{{ extracted_text|length|add:"-500"|stringformat:"d"|add:"..."|conditional:""|slice:"500:" }}`;
+    {% endif %}
+
+    // Handle form submission
+    document.getElementById('ai-resume-upload-form').addEventListener('submit', function(e) {
+        const fileInput = document.getElementById('{{ form.resume_file.id_for_label }}');
+        const jobDescription = document.getElementById('{{ form.job_description.id_for_label }}').value.trim();
+        
+        if (!fileInput.files[0]) {
+            e.preventDefault();
+            showError('Please upload your resume file');
+            return;
+        }
+        
+        if (!jobDescription) {
+            e.preventDefault();
+            showError('Please provide the job description');
+            return;
+        }
+        
+        // Show processing indicator
+        document.getElementById('processing-indicator').style.display = 'block';
+        document.getElementById('continue-btn').disabled = true;
+    });
+});
+
+function showError(message) {
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('error-modal').style.display = 'flex';
+}
+
+function closeErrorModal() {
+    document.getElementById('error-modal').style.display = 'none';
+}
+
+function removeFile() {
+    const fileInput = document.getElementById('{{ form.resume_file.id_for_label }}');
+    fileInput.value = '';
+    document.getElementById('file-info').style.display = 'none';
+    document.querySelector('.file-upload-area').classList.remove('has-file');
+    document.getElementById('preview-section').style.display = 'none';
+}
+</script>
+{% endblock %}

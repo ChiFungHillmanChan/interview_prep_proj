@@ -1,0 +1,329 @@
+.golden-resume-container {
+  width: 8.27in;
+  min-height: 11.69in;
+  margin: 0 auto;
+  padding: 0.7in 0.6in 0.7in 0.6in; /* Top/Bottom 0.7in, Left/Right 0.6in */
+  font-size: 11pt;
+  line-height: 1.25;
+  background: #fff;
+}
+.golden-resume-container h1 { font-size: 18pt; font-weight: 700; line-height: 1.15; margin-bottom: 4pt; }
+.golden-resume-container h2 { font-size: 12pt; font-weight: 700; text-transform: uppercase; line-height: 1.2; margin: 12pt 0 6pt 0; }
+.golden-resume-container h2 { border-bottom: 1px solid #000; padding-bottom: 2pt; }
+.golden-resume-container ul { margin-top: 0; margin-bottom: 8pt; }
+.golden-resume-container li { margin-bottom: 8pt; }
+
+/* Monochrome override to ensure ATS-safe black text only */
+.golden-resume-container, .golden-resume-container * { color: #000 !important; }
+.golden-resume-container a { color: #000 !important; text-decoration: underline; }
+
+/* Lists and bullets */
+.golden-resume-container ul { list-style-type: disc; padding-left: 1.1em; }
+
+/* Slight, non-intrusive highlighting for analysis mode */
+.golden-resume-container .highlight { background: #f2f2f2; }
+
+/* Prevent any transforms/zoom from altering layout */
+.golden-resume-container { transform: none !important; }
+
+@media print {
+  @page { size: A4; margin: 0; }
+}
+
+/* Golden header two-zone layout */
+.golden-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12pt; }
+.golden-header .gh-left { flex: 1 1 auto; min-width: 0; }
+.golden-header .gh-left h1 { white-space: nowrap; }
+.golden-header .gh-right { max-width: 50%; text-align: right; font-size: 11pt; line-height: 1.15; }
+
+/* ===== EDIT RESUME UI STYLES ===== */
+
+/* Edit Tabs */
+.edit-tabs {
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.tab-headers {
+    display: flex;
+    background: var(--gray-100);
+    border-bottom: 1px solid var(--gray-200);
+    overflow-x: auto;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--gray-600);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    min-width: fit-content;
+}
+
+.tab-btn:hover {
+    background: var(--gray-200);
+    color: var(--gray-800);
+}
+
+.tab-btn.active {
+    background: white;
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+    font-weight: 600;
+}
+
+.tab-panels {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+/* Form Elements */
+.form-row {
+    margin-bottom: 1rem;
+}
+
+.form-row.full {
+    grid-column: 1 / -1;
+}
+
+.form-row.inline {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.form-row.inline input {
+    flex: 1;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.form-row label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin-bottom: 0.25rem;
+}
+
+.form-row input,
+.form-row textarea,
+.form-row select {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-row input:focus,
+.form-row textarea:focus,
+.form-row select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-row textarea {
+    resize: vertical;
+    min-height: 3rem;
+}
+
+/* Group Blocks for Experience/Education */
+.group-block {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.group-header strong {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+.small-link {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    font-size: 0.75rem;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+}
+
+.small-link:hover {
+    color: var(--danger-dark);
+}
+
+/* Buttons */
+.small-btn {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.small-btn:hover {
+    background: var(--primary-dark);
+}
+
+/* Modal Actions */
+.modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--gray-200);
+    margin-top: 1.5rem;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.action-btn.primary {
+    background: var(--success-color);
+    color: white;
+}
+
+.action-btn.primary:hover {
+    background: var(--success-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.action-btn.secondary {
+    background: var(--gray-200);
+    color: var(--gray-700);
+}
+
+.action-btn.secondary:hover {
+    background: var(--gray-300);
+    color: var(--gray-800);
+}
+
+.action-btn i {
+    font-size: 0.875rem;
+}
+
+/* Side Editor Specific Styles */
+#sideEditorCard {
+    border: 1px solid var(--primary-color);
+    box-shadow: var(--shadow-lg);
+}
+
+#sideEditorCard .card-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    color: white;
+}
+
+#sideEditorCard .tab-headers {
+    background: var(--primary-50);
+}
+
+#sideEditorCard .tab-btn {
+    color: var(--primary-700);
+}
+
+#sideEditorCard .tab-btn:hover {
+    background: var(--primary-100);
+}
+
+#sideEditorCard .tab-btn.active {
+    background: white;
+    color: var(--primary-color);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .tab-headers {
+        flex-wrap: wrap;
+    }
+    
+    .tab-btn {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .modal-actions {
+        flex-direction: column;
+    }
+    
+    .action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Accessibility */
+.form-row input:focus,
+.form-row textarea:focus,
+.form-row select:focus,
+.tab-btn:focus,
+.small-btn:focus,
+.action-btn:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Animation for tabs */
+.tab-panel {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.tab-panel.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+

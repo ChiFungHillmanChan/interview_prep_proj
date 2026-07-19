@@ -1,0 +1,32 @@
+# ---- Secrets / credentials ----
+.env
+*.env
+!.env.example
+
+# ---- Python virtualenv ----
+env/
+venv/
+.venv/
+
+# ---- Python bytecode ----
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ---- Django ----
+db.sqlite3
+db.sqlite3-journal
+*.log
+# Collected static (regenerate with `python manage.py collectstatic`)
+staticfiles/
+media/
+
+# ---- Personal / PII (do not publish) ----
+ChiFungHillmanChan.pdf
+ChiFungHillmanChan.docx
+
+# ---- Editor / OS / tooling ----
+.DS_Store
+**/.DS_Store
+.vscode/
+**/settings.local.json

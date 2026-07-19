@@ -1,0 +1,309 @@
+{% extends 'prep_app/base.html' %}
+{% load static %}
+
+{% block title %}AI Resume Builder - Download{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/ai_resume_template.css' %}">
+<link rel="stylesheet" href="{% static 'css/ai_resume_download.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="ai-resume-download-container">
+    <div class="download-header">
+        <h1>AI Resume Builder</h1>
+        <p class="download-subtitle">Your optimized resume is ready!</p>
+        <div class="progress-steps">
+            <div class="step completed">1. Upload</div>
+            <div class="step completed">2. Edit</div>
+            <div class="step active">3. Download</div>
+        </div>
+    </div>
+
+    <div class="download-content">
+        <!-- Analysis Summary -->
+        {% if analysis %}
+        <div class="analysis-card">
+            <div class="analysis-header">
+                <h2>Resume Analysis</h2>
+                <div class="coverage-score">
+                    <div class="score-circle" data-score="{{ analysis.coverage_score|floatformat:0 }}">
+                        <span class="score-number">{{ analysis.coverage_score|floatformat:0 }}%</span>
+                        <span class="score-label">Match</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="analysis-content">
+                {% if analysis.missing_keywords %}
+                <div class="analysis-section">
+                    <h3>Missing Keywords</h3>
+                    <div class="keyword-tags">
+                        {% for keyword in analysis.missing_keywords %}
+                            <span class="keyword-tag missing">{{ keyword }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if analysis.recommendations %}
+                <div class="analysis-section">
+                    <h3>Recommendations</h3>
+                    <ul class="recommendations-list">
+                        {% for recommendation in analysis.recommendations %}
+                            <li>{{ recommendation }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Download Options -->
+        <div class="download-card">
+            <h2>Download Your Resume</h2>
+            <p>Choose your preferred format. Both formats maintain the exact layout and styling.</p>
+            
+            <div class="download-options">
+                <div class="download-option">
+                    <div class="option-icon">📄</div>
+                    <div class="option-content">
+                        <h3>PDF Format</h3>
+                        <p>Perfect for online applications and email attachments. Maintains exact formatting.</p>
+                        <form method="post" action="{% url 'ai_resume_export_pdf' %}" class="download-form">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <span>Download PDF</span>
+                                <span class="btn-icon">⬇</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="download-option">
+                    <div class="option-icon">📝</div>
+                    <div class="option-content">
+                        <h3>DOCX Format</h3>
+                        <p>Editable Word document with similar styling. Easy to customize further.</p>
+                        <form method="post" action="{% url 'ai_resume_export_docx' %}" class="download-form">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <span>Download DOCX</span>
+                                <span class="btn-icon">⬇</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="filename-info">
+                <small>Files will be saved as: <strong>{{ filename_base }}.pdf</strong> and <strong>{{ filename_base }}.docx</strong></small>
+            </div>
+        </div>
+
+        <!-- Preview Card -->
+        <div class="preview-card">
+            <div class="preview-header">
+                <h2>Final Preview</h2>
+                <div class="preview-actions">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="goBackToEditor()">
+                        ✏️ Edit Resume
+                    </button>
+                </div>
+            </div>
+            
+            <div class="preview-container">
+                <div id="final-preview-container">
+                    <!-- Final resume preview will be rendered here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Job Information Recap -->
+        {% if job_info %}
+        <div class="job-recap-card">
+            <h2>Job Application Summary</h2>
+            <div class="job-recap-content">
+                <div class="job-detail">
+                    <strong>Position:</strong> {{ job_info.title }}
+                </div>
+                <div class="job-detail">
+                    <strong>Application:</strong> {{ job_info.name }}
+                </div>
+                {% if job_info.keywords.must_have %}
+                <div class="job-detail">
+                    <strong>Key Requirements:</strong>
+                    <div class="keyword-tags">
+                        {% for keyword in job_info.keywords.must_have %}
+                            <span class="keyword-tag required">{{ keyword }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Tips Card -->
+        <div class="tips-card">
+            <h2>Application Tips</h2>
+            <div class="tips-content">
+                <div class="tip-item">
+                    <div class="tip-icon">✅</div>
+                    <div class="tip-text">
+                        <strong>File Naming:</strong> Use descriptive filenames like "YourName_CompanyName_Role.pdf"
+                    </div>
+                </div>
+                <div class="tip-item">
+                    <div class="tip-icon">📧</div>
+                    <div class="tip-text">
+                        <strong>Email Subject:</strong> Include the job title and your name in the subject line
+                    </div>
+                </div>
+                <div class="tip-item">
+                    <div class="tip-icon">🎯</div>
+                    <div class="tip-text">
+                        <strong>Customization:</strong> Your resume has been optimized for this specific role
+                    </div>
+                </div>
+                <div class="tip-item">
+                    <div class="tip-icon">📊</div>
+                    <div class="tip-text">
+                        <strong>ATS-Friendly:</strong> The formatting is optimized for Applicant Tracking Systems
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="download-navigation">
+        <button type="button" class="btn btn-secondary" onclick="goBackToEditor()">
+            ← Back to Editor
+        </button>
+        <button type="button" class="btn btn-outline" onclick="startOver()">
+            🔄 Start New Resume
+        </button>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loading-overlay" style="display: none;">
+    <div class="loading-content">
+        <div class="spinner"></div>
+        <div class="loading-text">Generating your resume...</div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div class="modal" id="success-modal" style="display: none;">
+    <div class="modal-content success-modal">
+        <div class="success-icon">✅</div>
+        <h3>Resume Downloaded Successfully!</h3>
+        <p>Your optimized resume has been downloaded and is ready for your job application.</p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-primary" onclick="closeSuccessModal()">Great!</button>
+        </div>
+    </div>
+</div>
+
+<!-- Resume Data -->
+<script id="final-resume-data" type="application/json">
+{{ resume_data|safe }}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/ai_resume_preview.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize final preview
+    const resumeData = JSON.parse(document.getElementById('final-resume-data').textContent || '{}');
+    const preview = new AIResumePreview('final-preview-container');
+    preview.render(resumeData);
+    
+    // Set default zoom to 75% for download page
+    preview.setZoom(75);
+    
+    // Handle form submissions
+    setupDownloadForms();
+    
+    // Initialize coverage score animation
+    animateCoverageScore();
+});
+
+function setupDownloadForms() {
+    const downloadForms = document.querySelectorAll('.download-form');
+    
+    downloadForms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            // Show loading overlay
+            document.getElementById('loading-overlay').style.display = 'flex';
+            
+            // Set a timeout to hide loading and show success (fallback)
+            setTimeout(() => {
+                document.getElementById('loading-overlay').style.display = 'none';
+                showSuccessModal();
+            }, 3000);
+        });
+    });
+}
+
+function animateCoverageScore() {
+    const scoreCircles = document.querySelectorAll('.score-circle');
+    
+    scoreCircles.forEach(circle => {
+        const score = parseInt(circle.dataset.score);
+        const circumference = 2 * Math.PI * 45; // radius = 45
+        const strokeDasharray = circumference;
+        const strokeDashoffset = circumference - (score / 100) * circumference;
+        
+        // Create SVG circle if it doesn't exist
+        if (!circle.querySelector('svg')) {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '100');
+            svg.setAttribute('height', '100');
+            svg.innerHTML = `
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#e9ecef" stroke-width="8"/>
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#007bff" stroke-width="8" 
+                        stroke-dasharray="${strokeDasharray}" stroke-dashoffset="${strokeDashoffset}"
+                        stroke-linecap="round" transform="rotate(-90 50 50)" class="score-progress"/>
+            `;
+            circle.appendChild(svg);
+        }
+    });
+}
+
+function showSuccessModal() {
+    document.getElementById('success-modal').style.display = 'flex';
+}
+
+function closeSuccessModal() {
+    document.getElementById('success-modal').style.display = 'none';
+}
+
+function goBackToEditor() {
+    if (confirm('Go back to edit your resume? You can always return here to download.')) {
+        window.location.href = '{% url "ai_resume_editor" %}';
+    }
+}
+
+function startOver() {
+    if (confirm('Start over with a new resume? This will clear all your current progress.')) {
+        // Clear any session data and redirect to upload
+        fetch('{% url "ai_resume_clear_session" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        }).then(() => {
+            window.location.href = '{% url "ai_resume_upload" %}';
+        }).catch(() => {
+            // Redirect anyway if request fails
+            window.location.href = '{% url "ai_resume_upload" %}';
+        });
+    }
+}
+</script>
+{% endblock %}

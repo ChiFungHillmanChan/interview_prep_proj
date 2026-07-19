@@ -1,0 +1,280 @@
+{% extends 'prep_app/base.html' %} 
+{% load static %} 
+
+{% block css%}
+<style>
+  input:not([type="checkbox"]) {
+    width: 100%;
+    padding: 0.5rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+  }
+  input:focus {
+      border-color: transparent;
+      ring: 2px;
+      ring-color: #2563eb;
+  }
+
+  .form-input {
+      @apply w-full px-4 py-2 border border-gray-300 rounded-lg transition-colors duration-200;
+  }
+  .form-input:focus {
+      @apply border-blue-600 ring-2 ring-blue-600 ring-opacity-50 outline-none;
+  }
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="flex h-screen">
+  <nav class="w-1/6 bg-white shadow-lg p-6">
+    <div class="flex items-center mb-6">
+      <img src="{% static 'images/logo.png' %}" alt="Logo" class="h-8 mr-3">
+      <span class="text-gray-800 font-semibold text-lg">My Profile</span>
+    </div>
+    <ul class="space-y-4">
+      <li>
+        <a data-section="#account-details" class="nav-link flex items-center text-gray-600 hover:text-blue-600 font-medium">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+          </svg>
+          Account Details
+        </a>
+      </li>
+      <li>
+        <a data-section="#current-plan" class="nav-link flex items-center text-gray-600 hover:text-blue-600 font-medium">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          Current Plan
+        </a>
+      </li>
+      <li>
+        <a data-section="#feature-preview" class=" hidden nav-link flex items-center text-gray-600 hover:text-blue-600 font-medium">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+          </svg>
+          Feature Preview
+        </a>
+      </li>
+      <li>
+        <a data-section="#help-support"  class="hidden nav-link flex items-center text-gray-600 hover:text-blue-600 font-medium">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 0a2.828 2.828 0 10-4 4l3.536 3.536 4-4z"></path>
+          </svg>
+          Help & Support
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+    <div id="account-details" class="section flex-1 p-8">
+      <h2 class="text-2xl font-bold text-gray-900 mb-6">Account Details</h2>
+
+      {% csrf_token %}
+
+        <div class="mb-4">
+          <label for="username" class="block font-medium text-gray-700 mb-1">
+            Username
+          </label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            class="form-input"
+            value="{{ user.username }}"
+            readonly
+          />
+        </div>
+
+        <div class="mb-4">
+          <label for="email" class="block font-medium text-gray-700 mb-1">
+            Email
+          </label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            class="form-input"
+            value="{{ user.email }}"
+            readonly
+          />
+        </div>
+
+        <div class="mb-4">
+          <label for="old_password" class="block font-medium text-gray-700 mb-1">
+            Current Password
+          </label>
+          {{ password_form.old_password }}
+        </div>
+
+        <div class="mb-4">
+          <label for="new_password1" class="block font-medium text-gray-700 mb-1">
+            New Password
+          </label>
+          {{ password_form.new_password1 }}
+        </div>
+
+        <div class="mb-6">
+          <label for="new_password2" class="block font-medium text-gray-700 mb-1">
+            Confirm New Password
+          </label>
+          {{ password_form.new_password2 }}
+        </div>
+
+        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+          Confirm
+        </button>
+    </div>
+
+  <div id="current-plan" class="section hidden flex-1 p-8">
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">Your Current Plan</h2>
+
+    <div class="grid grid-cols-2 md:grid-cols-2 gap-8">
+      <!-- Free Plan -->
+      <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+        <div class="px-6 py-8 bg-gray-100 text-gray-800 text-center">
+          <h3 class="text-2xl font-bold mb-2">Free Plan</h3>
+          <p class="text-gray-600 mb-4">The basic plan to get you started</p>
+          <div class="flex items-baseline justify-center">
+            <span class="text-4xl font-extrabold text-gray-800">$0</span>
+            <span class="text-gray-500">/month</span>
+          </div>
+        </div>
+        <div class="px-6 py-6 bg-white text-gray-600">
+          <ul class="space-y-4">
+            <li class="flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              5 CV or Job Analyses per day
+            </li>
+            <li class="flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              2 Total Resume Downloads
+            </li>
+            <li class="flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              500MB Storage
+            </li>
+            <li class="flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              2 Job Interview Practice per month
+            </li>
+          </ul>
+          <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4 w-full">
+            Upgrade to Pro
+          </button>
+        </div>
+      </div>
+    
+      <!-- Pro Plan -->
+      <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+        <div class="px-6 py-8 bg-gray-100 text-gray-800 text-center">
+          <h3 class="text-2xl font-bold mb-2">Pro Plan</h3>
+          <p class="text-gray-600 mb-4">The premium plan for your needs</p>
+          <div class="flex items-baseline justify-center">
+            <span class="text-4xl font-extrabold text-gray-800">$10</span>
+            <span class="text-gray-500">/month</span>
+          </div>
+        </div>
+        <div class="px-6 py-6 bg-white text-gray-600">
+          <ul class="space-y-4">
+            <li class="flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              30 CV or Job Analyses per day
+            </li>
+            <li class="flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              Unlimited Total Resume Downloads
+            </li>
+            <li class="flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              Format Chosen
+            </li>
+            <li class="flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              10x Storage
+            </li>
+            <li class="flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              Access to All Interview Practice
+            </li>
+          </ul>
+          <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4 w-full">
+            Get started
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="feature-preview" class="section hidden flex-1 p-8">
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">Feature Preview</h2>
+
+    <!-- Feature preview content -->
+  </div>
+
+  <div id="help-support" class="section hidden flex-1 p-8">
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">Help & Support</h2>
+
+    <!-- Help and support content -->
+  </div>
+
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const navLinks = document.querySelectorAll('.nav-link');
+    const sections = document.querySelectorAll('.section');
+
+    navLinks.forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+
+        // Get the target section ID from the link’s href attribute
+        const targetId = link.getAttribute('data-section');
+        const targetSection = document.querySelector(targetId);
+
+        // Check if target section exists
+        if (targetSection) {
+          // Hide all sections
+          sections.forEach(function(section) {
+            section.classList.add('hidden');
+          });
+
+          // Show only the target section
+          targetSection.classList.remove('hidden');
+        } else {
+          console.warn(`Section with ID ${targetId} not found.`);
+        }
+      });
+    });
+  });
+</script>
+
+
+
+{% endblock %}

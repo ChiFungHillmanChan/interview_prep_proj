@@ -1,0 +1,494 @@
+{% extends 'prep_app/base.html' %}
+{% load static %}
+
+{% block title %}AI Resume Builder - Editor{% endblock %}
+
+{% block css %}
+<style>
+  /* --- App layout --- */
+  :root { --panel-bg:#fafafa; --border:#e5e5e5; }
+  .ai-resume-editor-container { height: calc(100vh - 100px); }
+  .editor-header {
+    background: #fff;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
+  }
+  .editor-header h1 {
+    font-size: 18px;
+    margin: 0 0 8px;
+    color: #333;
+  }
+  .progress-steps {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .step {
+    font-size: 12px;
+    color: #666;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .step.active {
+    background: #007bff;
+    color: white;
+  }
+  .step.completed {
+    background: #28a745;
+    color: white;
+  }
+  
+  .editor-main {
+    display: grid;
+    grid-template-columns: 42% 58%;
+    height: calc(100vh - 160px);
+  }
+  .editor-panel {
+    border-right: 1px solid var(--border);
+    background: var(--panel-bg);
+    overflow: auto;
+  }
+  .editor-panel .wrap { padding: 16px 18px 24px; max-width: 820px; margin: 0 auto; }
+  .editor-panel h2 { font-size: 14px; margin: 18px 0 8px; border-top:1px solid var(--border); padding-top:12px; }
+  .row { display:grid; grid-template-columns: 140px 1fr; gap:10px; align-items: start; margin: 8px 0; }
+  .row label { font-size: 12px; color:#222; padding-top:6px; }
+  input[type="text"], input[type="email"], input[type="tel"], input[type="url"], textarea { width: 100%; box-sizing:border-box; border:1px solid #ccc; border-radius:6px; padding:10px 12px; font-size: 13px; background:#fff; }
+  textarea { min-height: 72px; resize: vertical; }
+  .hint { font-size: 11px; color:#666; margin: 4px 0 0; }
+  .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .muted { color:#666; font-size:12px; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; margin: 8px 0 2px; }
+  button, .btn { border:1px solid #bbb; background:#fff; border-radius:6px; padding:8px 10px; font-size:12px; cursor:pointer; text-decoration: none; display: inline-block; }
+  button:hover, .btn:hover { background:#f2f2f2; }
+  .btn-outline { border-color: #007bff; color: #007bff; }
+  .btn-primary { background: #007bff; color: white; border-color: #007bff; }
+  .btn-secondary { background: #6c757d; color: white; border-color: #6c757d; }
+
+  /* --- Preview pane --- */
+  .preview-panel { overflow: auto; padding: 14px; }
+  .preview-header {
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .preview-header h3 {
+    font-size: 14px;
+    margin: 0;
+    color: #333;
+  }
+  .preview-container { }
+  .sheet { width: 595.28pt; margin: 0 auto 20px; }
+  .page { box-sizing: border-box; width: 595.28pt; height: 841.89pt; padding: 28.2pt 15.5pt 32pt 21.5pt; background: #fff; position:relative; overflow:hidden; page-break-after: always; }
+  @media screen { .page { box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 6px 30px rgba(0,0,0,.12); } }
+
+  /* --- Resume template (exact styling) --- */
+  @page { size: A4; margin: 0; }
+  .name { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:32pt; line-height:1.05; text-align:center; margin:0; color:#000; }
+  .role { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:19.5pt; text-align:center; margin:0.6em 0 0; color:#000; }
+  .contact-row { display:grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; column-gap: 12pt; margin-top: 0.8em; }
+  .contact-row .left,.contact-row .center,.contact-row .right { font-family: "Times New Roman", Times, serif; font-size:11pt; line-height:1.2; white-space: nowrap; min-width: 0; color:#000; }
+  .contact-row .left { justify-self: start; }
+  .contact-row .center { justify-self: center; }
+  .contact-row .right { justify-self: end; text-align: right; }
+  .contact-row a { color:#000; text-decoration:none; overflow-wrap:anywhere; word-break:break-word; }
+  .section { margin-top:1.35em; }
+  .section-title { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:14pt; text-transform:uppercase; margin:0; padding-bottom:6pt; border-bottom:1px solid #000; color:#000; }
+  .summary { margin-top:8pt; font-family: "Times New Roman", Times, serif; font-size:14pt; line-height:1.14; color:#000; }
+  .skills-list { list-style:none; margin:8pt 0 0; padding:0; }
+  .skills-list li { font-family: "Times New Roman", Times, serif; font-size:11pt; line-height:1.2; color:#000; }
+  .skills-list b { font-weight:700; }
+  .edu-degree,.edu-institution { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:14pt; margin:0.6em 0 0; color:#000; }
+  .edu-meta { display:flex; justify-content:space-between; font-family:"Times New Roman", Times, serif; font-size:11pt; color:#000; }
+  .entry-header { display:flex; justify-content:space-between; gap:12pt; margin-top:0.65em; align-items:flex-start; }
+  .entry-title { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:14pt; flex:1 1 auto; min-width:0; margin:0; color:#000; }
+  .entry-date { font-family: "Times New Roman", Times, serif; font-size:11pt; white-space:nowrap; flex:0 0 auto; margin:0; color:#000; }
+  .bullet-list { list-style:none; margin:6pt 0 0; padding:0; }
+  .bullet-list li { position:relative; font-family:"Times New Roman", Times, serif; font-size:12pt; line-height:1.22; margin:0.25em 0 0; padding-left:52.5pt; color:#000; }
+  .bullet-list li::before { content:"•"; position:absolute; left:38.52pt; top:0; font-size:12pt; }
+
+  /* helper */
+  .placeholder { color:#999; font-style:italic; }
+  
+  /* QA Panel and Navigation Styling */
+  .qa-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border-top: 2px solid #007bff;
+    padding: 16px;
+    box-shadow: 0 -4px 12px rgba(0,0,0,.1);
+    z-index: 1000;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .qa-header h3 {
+    margin: 0 0 4px;
+    font-size: 16px;
+  }
+  .qa-item {
+    margin: 12px 0;
+  }
+  .qa-question {
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .qa-actions {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .editor-navigation {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border-top: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    z-index: 999;
+  }
+  .loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+  }
+  .loading-content {
+    background: #fff;
+    padding: 24px;
+    border-radius: 8px;
+    text-align: center;
+  }
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ai-resume-editor-container">
+    <div class="editor-header">
+        <h1>AI Resume Builder</h1>
+        <div class="progress-steps">
+            <div class="step completed">1. Upload</div>
+            <div class="step active">2. Edit</div>
+            <div class="step">3. Download</div>
+        </div>
+    </div>
+
+    <div class="editor-main">
+        <!-- ================= Editor (left) ================= -->
+        <div class="editor-panel">
+            <div class="wrap">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h1 style="font-size: 16px; margin: 0;">Resume Data</h1>
+                    <button type="button" class="btn btn-outline" onclick="resetToOriginal()" style="font-size: 11px; padding: 6px 8px;">
+                        ↻ Reset to AI
+                    </button>
+                </div>
+                
+                <div class="row"><label>Full Name</label><input id="resume-name" type="text" placeholder="e.g., Chi Fung Hillman Chan" /></div>
+                <div class="row"><label>Role / Title</label><input id="resume-role" type="text" placeholder="e.g., Graduate Software Engineer" /></div>
+
+                <h2>Contacts</h2>
+                <div class="grid-2">
+                    <div class="row"><label>Email</label><input id="contact-email" type="email" placeholder="e.g., name@email.com" /></div>
+                    <div class="row"><label>Phone</label><input id="contact-phone" type="tel" placeholder="e.g., 07123 456789" /></div>
+                    <div class="row"><label>Location (Right)</label><input id="contact-location" type="text" placeholder="City, Country" /></div>
+                    <div class="row"><label>GitHub (Left)</label><input id="contact-github" type="url" placeholder="https://github.com/username" /></div>
+                    <div class="row"><label>Website (Right)</label><input id="contact-website" type="url" placeholder="yourdomain.com" /></div>
+                </div>
+
+                <h2>Summary</h2>
+                <div class="row"><label>Summary Text</label><textarea id="resume-summary" placeholder="Short paragraph about you"></textarea></div>
+
+                <h2>Skills (labels fixed, values comma-separated)</h2>
+                <div class="row"><label>Programming</label><input id="skills-programming" type="text" /></div>
+                <div class="row"><label>Database</label><input id="skills-database" type="text" /></div>
+                <div class="row"><label>AI/ML Tools</label><input id="skills-ai-ml" type="text" /></div>
+                <div class="row"><label>Tools & Methodologies</label><input id="skills-tools" type="text" /></div>
+                <div class="row"><label>Soft Skills</label><input id="skills-soft" type="text" /></div>
+                <div class="row"><label>Additional</label><input id="skills-additional" type="text" /></div>
+
+                <h2>Education</h2>
+                <div class="row"><label>Degree</label><input id="edu-degree" type="text" /></div>
+                <div class="row"><label>Institution</label><input id="edu-institution" type="text" /></div>
+                <div class="grid-2">
+                    <div class="row"><label>Dates (left)</label><input id="edu-dates" type="text" placeholder="e.g., Sep 2021 - Jul 2024" /></div>
+                    <div class="row"><label>Location (right)</label><input id="edu-location" type="text" placeholder="City, Country" /></div>
+                </div>
+
+                <h2>Experience (three entries max for now)</h2>
+                <div class="controls">
+                    <button type="button" onclick="addExperience()">+ Add Experience</button>
+                    <span class="muted">(Title, Date on right, bullets newline-separated)</span>
+                </div>
+                <div id="experience-list"></div>
+
+                <h2>Projects (three entries max for now)</h2>
+                <div class="controls">
+                    <button type="button" onclick="addProject()">+ Add Project</button>
+                    <span class="muted">(Title, Date on right, bullets newline-separated)</span>
+                </div>
+                <div id="projects-list"></div>
+            </div>
+        </div>
+
+        <!-- ================= Preview (right) ================= -->
+        <div class="preview-panel">
+            <div class="preview-header">
+                <h3>Live Preview</h3>
+            </div>
+            <div id="preview-root" class="sheet"><!-- pages will be rendered here --></div>
+        </div>
+    </div>
+
+    <!-- AI Q&A Panel (shown when questions_for_user exist) -->
+    <div class="qa-panel" id="qa-panel" style="display: none;">
+        <div class="qa-header">
+            <h3>AI has some questions for you</h3>
+            <p>Please provide additional details to improve your resume</p>
+        </div>
+        <div class="qa-content" id="qa-content">
+            <!-- Questions will be populated here -->
+        </div>
+        <div class="qa-actions">
+            <button type="button" class="btn btn-outline" onclick="skipQuestions()">Skip for now</button>
+            <button type="button" class="btn btn-primary" onclick="submitAnswers()">Update Resume</button>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="editor-navigation">
+        <button type="button" class="btn btn-secondary" onclick="goBack()">
+            ← Back to Upload
+        </button>
+        <button type="button" class="btn btn-primary" onclick="proceedToDownload()">
+            Continue to Download →
+        </button>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loading-overlay" style="display: none;">
+    <div class="loading-content">
+        <div class="spinner"></div>
+        <div class="loading-text">Updating resume with AI...</div>
+    </div>
+</div>
+
+<!-- Resume Data (populated from server) -->
+<script id="resume-data" type="application/json">
+{{ resume_data|safe }}
+</script>
+
+<script id="ai-result-data" type="application/json">
+{{ ai_result|safe }}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/ai_resume_preview.js' %}"></script>
+<script src="{% static 'js/ai_resume_editor.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Debug: Check raw data before parsing
+    const resumeDataElement = document.getElementById('resume-data');
+    const aiResultElement = document.getElementById('ai-result-data');
+    
+    console.log('=== AI RESUME DEBUG ===');
+    console.log('Resume data element:', resumeDataElement);
+    console.log('AI result element:', aiResultElement);
+    
+    const resumeDataText = resumeDataElement ? resumeDataElement.textContent : '{}';
+    const aiResultText = aiResultElement ? aiResultElement.textContent : '{}';
+    
+    console.log('Raw resume data text (first 200 chars):', resumeDataText.substring(0, 200));
+    console.log('Raw AI result text (first 200 chars):', aiResultText.substring(0, 200));
+    console.log('Resume data length:', resumeDataText.length);
+    console.log('AI result length:', aiResultText.length);
+    
+    // Initialize the editor
+    let resumeData, aiResult;
+    try {
+        resumeData = JSON.parse(resumeDataText);
+        console.log('✓ Parsed resume data successfully');
+        console.log('  - Name:', resumeData.name);
+        console.log('  - Role:', resumeData.role);
+        console.log('  - Summary length:', resumeData.summary ? resumeData.summary.length : 0);
+        console.log('  - Skills programming:', resumeData.skills ? resumeData.skills.programming : 'none');
+        console.log('  - Experience count:', resumeData.experience ? resumeData.experience.length : 0);
+    } catch (e) {
+        console.error('✗ Failed to parse resume data:', e);
+        console.error('Raw text that failed:', resumeDataText);
+        resumeData = {};
+    }
+    
+    try {
+        aiResult = JSON.parse(aiResultText);
+        console.log('✓ Parsed AI result successfully');
+        console.log('  - Job title:', aiResult.job ? aiResult.job.title : 'none');
+        console.log('  - Analysis coverage:', aiResult.analysis ? aiResult.analysis.coverage_score : 'none');
+        console.log('  - Questions count:', aiResult.questions_for_user ? aiResult.questions_for_user.length : 0);
+    } catch (e) {
+        console.error('✗ Failed to parse AI result:', e);
+        console.error('Raw text that failed:', aiResultText);
+        aiResult = {};
+    }
+    
+    // Initialize preview directly
+    console.log('Initializing AI Resume Preview...');
+    window.resumePreview = new AIResumePreview('ai-resume-preview-container');
+    
+    if (resumeData && Object.keys(resumeData).length > 0) {
+        console.log('Rendering resume data in preview');
+        window.resumePreview.render(resumeData);
+    } else {
+        console.log('No resume data found, showing empty state');
+        window.resumePreview.renderEmptyState();
+    }
+    
+    // Show Q&A panel if there are questions
+    if (aiResult.questions_for_user && aiResult.questions_for_user.length > 0) {
+        showQAPanel(aiResult.questions_for_user);
+    }
+});
+
+function showQAPanel(questions) {
+    const panel = document.getElementById('qa-panel');
+    const content = document.getElementById('qa-content');
+    
+    content.innerHTML = questions.map((question, index) => `
+        <div class="qa-item">
+            <label for="qa-${index}" class="qa-question">${question}</label>
+            <textarea id="qa-${index}" class="form-control" rows="3" placeholder="Your answer..."></textarea>
+        </div>
+    `).join('');
+    
+    panel.style.display = 'block';
+}
+
+function submitAnswers() {
+    const answers = {};
+    const qaItems = document.querySelectorAll('.qa-item');
+    
+    qaItems.forEach((item, index) => {
+        const question = item.querySelector('.qa-question').textContent;
+        const answer = item.querySelector(`#qa-${index}`).value.trim();
+        if (answer) {
+            answers[question] = answer;
+        }
+    });
+    
+    if (Object.keys(answers).length === 0) {
+        alert('Please provide at least one answer before updating.');
+        return;
+    }
+    
+    // Show loading
+    document.getElementById('loading-overlay').style.display = 'flex';
+    
+    // Send answers to server for AI refinement
+    fetch('{% url "ai_resume_refine" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            'user_answers': answers,
+            'current_resume': window.resumeEditor.getResumeData()
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loading-overlay').style.display = 'none';
+        
+        if (data.success) {
+            // Update editor with refined resume
+            window.resumeEditor.loadResumeData(data.resume);
+            document.getElementById('qa-panel').style.display = 'none';
+        } else {
+            alert('Failed to update resume: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        document.getElementById('loading-overlay').style.display = 'none';
+        console.error('Error:', error);
+        alert('Failed to update resume. Please try again.');
+    });
+}
+
+function skipQuestions() {
+    document.getElementById('qa-panel').style.display = 'none';
+}
+
+function resetToOriginal() {
+    if (confirm('Are you sure you want to reset all changes to the original AI version?')) {
+        const aiResult = JSON.parse(document.getElementById('ai-result-data').textContent || '{}');
+        if (aiResult.resume) {
+            window.resumeEditor.loadResumeData(aiResult.resume);
+        }
+    }
+}
+
+function goBack() {
+    if (confirm('Are you sure you want to go back? Your current changes will be lost.')) {
+        window.location.href = '{% url "ai_resume_upload" %}';
+    }
+}
+
+function proceedToDownload() {
+    // Save current resume data and proceed
+    const resumeData = window.resumeEditor.getResumeData();
+    
+    fetch('{% url "ai_resume_save" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            'resume_data': resumeData
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = '{% url "ai_resume_download" %}';
+        } else {
+            alert('Failed to save resume: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to save resume. Please try again.');
+    });
+}
+
+</script>
+
+{% csrf_token %}
+{% endblock %}

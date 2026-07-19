@@ -1,0 +1,491 @@
+{% extends 'prep_app/base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block title %}AI Resume Builder - Upload{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/ai_resume_professional.css' %}">
+<style>
+/* Loading Overlay */
+.upload-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loading-content {
+    text-align: center;
+    color: white;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3B82F6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.loading-subtext {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Skip to main content link for accessibility -->
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
+<div class="ai-resume-container" role="main" id="main-content">
+    <div class="container">
+        <!-- Professional Header -->
+        <div class="ai-resume-header">
+            <h1>AI Resume Builder</h1>
+            <p class="ai-resume-subtitle">Transform your resume with AI-powered optimization tailored to your target job</p>
+            
+            <!-- Progress Steps -->
+            <div class="progress-steps">
+                <div class="step active" data-step="1">
+                    <span>Upload & Analyze</span>
+                </div>
+                <div class="step pending" data-step="2">
+                    <span>Edit & Optimize</span>
+                </div>
+                <div class="step pending" data-step="3">
+                    <span>Download & Apply</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Form -->
+        <form method="post" enctype="multipart/form-data" class="ai-resume-form" id="ai-resume-upload-form">
+            {% csrf_token %}
+            
+            <!-- Loading Overlay -->
+            <div id="upload-loading" class="upload-loading-overlay" style="display: none;">
+                <div class="loading-content">
+                    <div class="spinner"></div>
+                    <div class="loading-text">Processing your resume...</div>
+                    <div class="loading-subtext">Please wait, this may take a moment.</div>
+                </div>
+            </div>
+            
+            <!-- Job Information Card -->
+            <div class="ai-resume-card">
+                <div class="ai-resume-card-header">
+                    <h2>
+                        <span style="font-size: 1.5rem;">🎯</span>
+                        Job Information
+                    </h2>
+                    <p>Tell us about the position you're applying for</p>
+                </div>
+                <div class="ai-resume-card-content">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.job_name.id_for_label }}">Application Name</label>
+                            {{ form.job_name|add_class:"form-input"|attr:"placeholder:e.g., Software Engineer at Google" }}
+                            <div class="form-help">A short name to identify this application</div>
+                            {% if form.job_name.errors %}
+                                <div class="form-error">{{ form.job_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.job_title.id_for_label }}">Job Title</label>
+                            {{ form.job_title|add_class:"form-input"|attr:"placeholder:e.g., Senior Software Engineer" }}
+                            <div class="form-help">The exact job title from the posting</div>
+                            {% if form.job_title.errors %}
+                                <div class="form-error">{{ form.job_title.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.job_description.id_for_label }}">Complete Job Description</label>
+                        {{ form.job_description|add_class:"form-textarea"|attr:"rows:8"|attr:"placeholder:Paste the complete job posting including requirements, responsibilities, and qualifications..." }}
+                        <div class="form-help">Include all details: requirements, responsibilities, qualifications, and company info</div>
+                        {% if form.job_description.errors %}
+                            <div class="form-error">{{ form.job_description.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resume Upload Card -->
+            <div class="ai-resume-card">
+                <div class="ai-resume-card-header">
+                    <h2>
+                        <span style="font-size: 1.5rem;">📄</span>
+                        Resume Upload
+                    </h2>
+                    <p>Upload your current resume for AI analysis and optimization</p>
+                </div>
+                <div class="ai-resume-card-content">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.resume_file.id_for_label }}">Resume File</label>
+                        <div class="file-upload-area" id="file-upload-area">
+                            <div class="file-upload-content">
+                                <div class="file-upload-icon">📄</div>
+                                <div class="file-upload-text">
+                                    <strong>Click to upload</strong> or drag and drop your resume
+                                </div>
+                                <div class="file-upload-help">PDF or DOCX files only (max 10MB)</div>
+                            </div>
+                            {{ form.resume_file|add_class:"file-input" }}
+                        </div>
+                        {% if form.resume_file.errors %}
+                            <div class="form-error">{{ form.resume_file.errors.0 }}</div>
+                        {% endif %}
+                        
+                        <!-- File Info Display -->
+                        <div class="file-info" id="file-info" style="display: none;">
+                            <div class="status-indicator status-success">
+                                <span>✓</span>
+                                <span class="file-name"></span>
+                                <span class="file-size"></span>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="removeFile()">
+                                Change File
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.extra_notes.id_for_label }}">Additional Information (Optional)</label>
+                        {{ form.extra_notes|add_class:"form-textarea"|attr:"rows:4"|attr:"placeholder:Additional achievements, certifications, or experience not fully captured in your resume..." }}
+                        <div class="form-help">Include any relevant details missing from your resume that relate to this job</div>
+                        {% if form.extra_notes.errors %}
+                            <div class="form-error">{{ form.extra_notes.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview Section -->
+            {% if extracted_text %}
+            <div class="ai-resume-card" id="preview-section">
+                <div class="ai-resume-card-header">
+                    <h2>
+                        <span style="font-size: 1.5rem;">👁️</span>
+                        Document Preview
+                    </h2>
+                    <p>Review the extracted text to ensure accuracy</p>
+                </div>
+                <div class="ai-resume-card-content">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Job Description Preview</label>
+                            <div class="preview-content" id="jd-preview">
+                                {{ job_description|slice:":500" }}{% if job_description|length > 500 %}...{% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Resume Text ({{ resume_file_type|default:"" }})</label>
+                            <div class="preview-content" id="resume-preview">
+                                {{ extracted_text|slice:":500" }}{% if extracted_text|length > 500 %}...{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Form Actions -->
+            <div class="form-actions" style="display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-xl);">
+                <button type="button" class="btn btn-secondary" onclick="window.history.back()">
+                    <span>←</span>
+                    <span>Back</span>
+                </button>
+                <button type="submit" class="btn btn-primary btn-lg" id="continue-btn">
+                    <span id="btn-text">Continue to Editor</span>
+                    <span id="btn-arrow">→</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="processing-indicator" style="display: none;">
+    <div class="loading-content">
+        <div class="spinner"></div>
+        <div class="loading-text">Analyzing your resume with AI...</div>
+        <p style="margin: var(--space-sm) 0 0; color: var(--gray-500); font-size: 0.875rem;">
+            This may take a few seconds
+        </p>
+    </div>
+</div>
+
+<!-- Error Modal -->
+<div class="modal" id="error-modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 style="color: var(--error-red);">
+                <span style="margin-right: var(--space-sm);">⚠️</span>
+                Upload Error
+            </h3>
+            <button type="button" class="modal-close" onclick="closeErrorModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="error-message"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" onclick="closeErrorModal()">Understood</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.preview-content {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    max-height: 12rem;
+    overflow-y: auto;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--gray-600);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: var(--font-mono);
+}
+
+.file-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.file-info {
+    margin-top: var(--space-md);
+    padding: var(--space-md);
+    background: var(--success-green-bg);
+    border: 1px solid var(--success-green);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.file-info .status-indicator {
+    flex: 1;
+    justify-content: flex-start;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/ai_resume_upload.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize upload handler with enhanced UI
+    const uploader = new AIResumeUploader();
+    
+    // Enhanced file info display
+    const originalDisplayFileInfo = uploader.displayFileInfo;
+    uploader.displayFileInfo = function(file) {
+        const fileInfo = document.getElementById('file-info');
+        const fileName = fileInfo.querySelector('.file-name');
+        const fileSize = fileInfo.querySelector('.file-size');
+        
+        if (fileName) fileName.textContent = file.name;
+        if (fileSize) fileSize.textContent = `(${uploader.formatFileSize(file.size)})`;
+        
+        fileInfo.style.display = 'flex';
+        
+        // Update upload area visual state
+        document.querySelector('.file-upload-area').classList.add('has-file');
+        document.querySelector('.file-upload-text').innerHTML = '<strong>File uploaded successfully!</strong>';
+        document.querySelector('.file-upload-help').textContent = 'Click "Change File" to upload a different resume';
+        document.querySelector('.file-upload-icon').textContent = '✅';
+    };
+    
+    // Show preview if we have processed data
+    {% if extracted_text %}
+        const previewSection = document.getElementById('preview-section');
+        if (previewSection) {
+            previewSection.style.display = 'block';
+            
+            // Animate preview appearance
+            setTimeout(() => {
+                previewSection.style.opacity = '0';
+                previewSection.style.transform = 'translateY(20px)';
+                previewSection.style.transition = 'all 0.5s ease';
+                previewSection.style.opacity = '1';
+                previewSection.style.transform = 'translateY(0)';
+            }, 100);
+        }
+        
+        const jdPreview = document.getElementById('jd-preview');
+        const resumePreview = document.getElementById('resume-preview');
+        
+        if (jdPreview) {
+            jdPreview.textContent = `{{ job_description|slice:":500" }}{% if job_description|length > 500 %}...{% endif %}`;
+        }
+        if (resumePreview) {
+            resumePreview.textContent = `{{ extracted_text|slice:":500" }}{% if extracted_text|length > 500 %}...{% endif %}`;
+        }
+    {% endif %}
+
+    // Enhanced form submission
+    document.getElementById('ai-resume-upload-form').addEventListener('submit', function(e) {
+        const fileInput = document.getElementById('{{ form.resume_file.id_for_label }}');
+        const jobDescription = document.getElementById('{{ form.job_description.id_for_label }}').value.trim();
+        
+        if (!fileInput.files[0]) {
+            e.preventDefault();
+            showError('Please upload your resume file before continuing.');
+            return;
+        }
+        
+        if (!jobDescription) {
+            e.preventDefault();
+            showError('Please provide the job description to analyze your resume against.');
+            return;
+        }
+        
+        // Show enhanced loading
+        document.getElementById('processing-indicator').style.display = 'flex';
+        document.getElementById('continue-btn').disabled = true;
+        
+        // Add loading animation to button
+        const btn = document.getElementById('continue-btn');
+        btn.innerHTML = '<div class="spinner" style="width: 1rem; height: 1rem; margin-right: var(--space-sm);"></div>Processing...';
+    });
+});
+
+function showError(message) {
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('error-modal').style.display = 'flex';
+}
+
+function closeErrorModal() {
+    document.getElementById('error-modal').style.display = 'none';
+}
+
+function removeFile() {
+    const fileInput = document.getElementById('{{ form.resume_file.id_for_label }}');
+    fileInput.value = '';
+    
+    // Reset UI states
+    document.getElementById('file-info').style.display = 'none';
+    document.querySelector('.file-upload-area').classList.remove('has-file');
+    document.querySelector('.file-upload-text').innerHTML = '<strong>Click to upload</strong> or drag and drop your resume';
+    document.querySelector('.file-upload-help').textContent = 'PDF or DOCX files only (max 10MB)';
+    document.querySelector('.file-upload-icon').textContent = '📄';
+    
+    // Hide preview section if showing
+    const previewSection = document.getElementById('preview-section');
+    if (previewSection) {
+        previewSection.style.display = 'none';
+    }
+}
+
+// Auto-update job description preview
+const jobDescTextarea = document.querySelector('textarea[name="job_description"]');
+if (jobDescTextarea) {
+    jobDescTextarea.addEventListener('input', function() {
+        const text = this.value.trim();
+        const jdPreview = document.getElementById('jd-preview');
+        
+        if (text && jdPreview) {
+            jdPreview.textContent = text.length > 500 ? text.substr(0, 500) + '...' : text;
+            
+            // Show preview section if file is also present
+            const fileInput = document.querySelector('.file-input');
+            if (fileInput && fileInput.files[0]) {
+                const previewSection = document.getElementById('preview-section');
+                if (previewSection) {
+                    previewSection.style.display = 'block';
+                }
+            }
+        }
+    });
+    
+    // Handle form submission with loading state and prevent double submission
+    const form = document.getElementById('ai-resume-upload-form');
+    const submitBtn = document.getElementById('continue-btn');
+    const loadingOverlay = document.getElementById('upload-loading');
+    const btnText = document.getElementById('btn-text');
+    const btnArrow = document.getElementById('btn-arrow');
+    
+    let isSubmitting = false;
+    
+    form.addEventListener('submit', function(e) {
+        console.log('Form submit event triggered');
+        
+        // Prevent double submission
+        if (isSubmitting) {
+            console.log('Double submission prevented');
+            e.preventDefault();
+            return false;
+        }
+        
+        // Validate form before submitting
+        const fileInput = document.querySelector('input[type="file"]');
+        const jobTitle = document.querySelector('input[name="job_title"]');
+        const jobDesc = document.querySelector('textarea[name="job_description"]');
+        
+        if (!fileInput.files.length) {
+            alert('Please upload a resume file');
+            e.preventDefault();
+            return false;
+        }
+        
+        if (!jobTitle.value.trim()) {
+            alert('Please enter a job title');
+            jobTitle.focus();
+            e.preventDefault();
+            return false;
+        }
+        
+        if (!jobDesc.value.trim()) {
+            alert('Please enter a job description');
+            jobDesc.focus();
+            e.preventDefault();
+            return false;
+        }
+        
+        // Show loading state
+        isSubmitting = true;
+        submitBtn.disabled = true;
+        submitBtn.style.opacity = '0.7';
+        btnText.textContent = 'Processing...';
+        btnArrow.textContent = '⏳';
+        loadingOverlay.style.display = 'flex';
+        
+        console.log('Form validation passed, submitting...');
+        // Allow form to submit normally
+    });
+}
+</script>
+{% endblock %}

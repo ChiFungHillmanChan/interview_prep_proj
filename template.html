@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Chi Fung Hillman Chan – Resume (A4 Print Clone)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  @page { size: A4; margin: 0; }
+  html, body { height: 100%; background: #fff; }
+  body {
+    margin: 0;
+    font-family: "Times New Roman", Times, serif;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page {
+    box-sizing: border-box;
+    width: 595.28pt;
+    height: 841.89pt;
+    padding: 28.2pt 15.5pt 32pt 21.5pt;
+    margin: 0 auto 20px auto; /* leave visual padding between pages */
+    background: #fff;
+    page-break-after: always;
+    overflow: hidden;
+    position: relative;
+  }
+  @media screen {
+    .page { box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 6px 30px rgba(0,0,0,.12); }
+  }
+  .name { font-weight:700; font-size:32pt; line-height:1.05; text-align:center; margin:0; }
+  .role { font-weight:700; font-size:19.5pt; text-align:center; margin:0.6em 0 0; }
+  .contact-row { display:grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; column-gap: 12pt; margin-top: 0.8em; }
+  .contact-row .left,.contact-row .center,.contact-row .right { font-size:11pt; line-height:1.2; white-space: nowrap; min-width: 0; }
+  .contact-row .left { justify-self: start; }
+  .contact-row .center { justify-self: center; }
+  .contact-row .right { justify-self: end; text-align: right; }
+  .contact-row a { overflow-wrap: anywhere; word-break: break-word; }
+  .section { margin-top:1.35em; }
+  .section-title { font-weight:700; font-size:14pt; text-transform:uppercase; margin:0; padding-bottom:6pt; border-bottom:1px solid #000; }
+  .summary { margin-top:8pt; font-size:14pt; line-height:1.14; }
+  .skills-list { list-style:none; margin:8pt 0 0; padding:0; }
+  .skills-list li { font-size:11pt; line-height:1.2; }
+  .skills-list b { font-weight:700; }
+  .edu-degree,.edu-institution { font-weight:700; font-size:14pt; margin:0.6em 0 0; }
+  .edu-meta { display:flex; justify-content:space-between; font-size:11pt; }
+  .entry-header { display:flex; justify-content:space-between; gap:12pt; margin-top:0.65em; align-items:flex-start; }
+  .entry-title { font-weight:700; font-size:14pt; flex:1 1 auto; min-width:0; margin:0; }
+  .entry-date { font-size:11pt; white-space:nowrap; flex:0 0 auto; margin:0; }
+  .bullet-list { list-style:none; margin:6pt 0 0; padding:0; }
+  .bullet-list li { position:relative; font-size:12pt; line-height:1.22; margin:0.25em 0 0; padding-left:52.5pt; break-inside: avoid; }
+  .bullet-list li::before { content:"•"; position:absolute; left:38.52pt; top:0; font-size:12pt; }
+  a { color:#000; text-decoration:none; }
+</style>
+</head>
+<body>
+  <div class="page">
+    <h1 class="name">Chi Fung Hillman Chan</h1>
+    <p class="role">Graduate Software Engineer</p>
+    <div class="contact-row">
+      <div class="left">hillmanchan709@gmail.com</div>
+      <div class="center">07818100147</div>
+      <div class="right">Leeds, West Yorkshire</div>
+    </div>
+    <div class="contact-row">
+      <div class="left">GitHub: <a href="https://github.com/ChiFungHillmanChan">https://github.com/ChiFungHillmanChan</a></div>
+      <div class="center"></div>
+      <div class="right">Website: <a href="http://hillmanchan.com/">hillmanchan.com</a></div>
+    </div>
+    <section class="section">
+      <h2 class="section-title">SUMMARY</h2>
+      <p class="summary">Data-driven Computer Science with AI graduate with hands-on experience in Python, SQL for data analysis, visualization, and reporting. Skilled in extracting actionable insights from structured and unstructured data, improving operational processes, and delivering clear recommendations to stakeholders. Experienced in customer behaviour analysis, building data pipelines, and creating dashboards that improve decision-making. Strong analytical thinker with proven ability to bridge technical solutions and business needs.</p>
+    </section>
+    <section class="section">
+      <h2 class="section-title">SKILLS</h2>
+      <ul class="skills-list">
+        <li><b>Programming:</b> Python, Java, JavaScript (React.js, Node.js), Django</li>
+        <li><b>Database:</b> MySQL, MongoDB</li>
+        <li><b>AI/ML Tools:</b> TensorFlow, PyTorch, Google Generative AI</li>
+        <li><b>Tools &amp; Methodologies:</b> Git, Unit Testing, API Development, System Integration, Excel</li>
+        <li><b>Soft Skills:</b> Analytical thinking, problem-solving, cross-team communication, independent execution</li>
+        <li><b>Additional:</b> Fluent in Mandarin and Cantonese, Full UK Driving Licence, No Visa Sponsership Required</li>
+      </ul>
+    </section>
+    <section class="section">
+      <h2 class="section-title">EDUCATION</h2>
+      <p class="edu-degree">BSc Computer Science with Artificial Intelligence</p>
+      <p class="edu-institution">University of Leeds</p>
+      <div class="edu-meta"><div>Sep 2021 - July 2024</div><div>Leeds, West Yorkshire</div></div>
+    </section>
+    <section class="section">
+      <h2 class="section-title">EXPERIENCE</h2>
+      <div class="entry-header"><p class="entry-title">Freelance Software Developer – PBM App Team, Hong Kong</p><p class="entry-date">Dec 2024 – Apr 2025</p></div>
+      <ul class="bullet-list">
+        <li>Developed cross-platform modules in React Native and TypeScript, improving app load performance by 25% on low-end devices.</li>
+        <li>Debugged UI rendering and memory optimization issues, reducing crashes and ensuring stable performance across Android and iOS.</li>
+        <li>Participated in Agile sprints and code reviews, ensuring clean, maintainable code.</li>
+      </ul>
+      <div class="entry-header"><p class="entry-title">Programming Tutor – Self-Employed, Hybrid</p><p class="entry-date">Jul 2023 – Present</p></div>
+      <ul class="bullet-list">
+        <li>Taught Python, Java, and software engineering fundamentals with a focus on data structures, algorithms, and debugging strategies.</li>
+        <li>Created custom exercises and unit testing frameworks to help students solve real-world coding problems.</li>
+        <li>Mentored students through end-to-end projects, emphasizing clean code, performance tuning, and best practices.</li>
+        <li>Coached a diverse range of learners, including students, former Hong Kong teachers, and company managers, in understanding AI concepts and software development foundations.</li>
+      </ul>
+    </section>
+  </div>
+  <div class="page">
+    <section class="section">
+      <div class="entry-header"><p class="entry-title">Online Service Colleague – Asda, UK</p><p class="entry-date">Jul 2022 – Jun 2025</p></div>
+      <ul class="bullet-list">
+        <li>Collaborated with cross-departmental teams to improve logistics workflows, ensuring smooth coordination between picking, packing, and delivery operations.</li>
+        <li>Designed Excel-based inventory check systems with formulas and validation, reducing product discrepancies by 30%.</li>
+        <li>Acted as a bridge between operations and management teams to identify issues and implement process optimizations.</li>
+      </ul>
+    </section>
+    <section class="section">
+      <h2 class="section-title">PROJECTS</h2>
+      <div class="entry-header"><p class="entry-title">Hong Kong Teacher SEN Management System</p><p class="entry-date">Jun 2025 - Aug 2025</p></div>
+      <ul class="bullet-list">
+        <li>Collaborated with former IT educators to develop a full-stack system replacing Excel workflows for Hong Kong teachers managing SEN (Special Educational Needs) records.</li>
+        <li>Built user-friendly React.js frontend with Vite.js and integrated PDF generation for meeting reports in official formats.</li>
+        <li>Designed and implemented a dual-database structure using PostgreSQL for structured student data and MongoDB for flexible records.</li>
+        <li>Enabled fast, detailed student searches and centralized meeting documentation for better accessibility and compliance.</li>
+        <li>Attracted interest from over 10+ active teachers and secured potential collaboration with an educational company exceeding £10K in value.</li>
+      </ul>
+      <div class="entry-header"><p class="entry-title">Resume Analyzing and Rating System</p><p class="entry-date">June 2024 - Present</p></div>
+      <ul class="bullet-list">
+        <li>Built a modular Python and Django platform to score resumes using NLP and classification models.</li>
+        <li>Solved early AI accuracy limitations by combining NLTK for targeted text extraction with Google Generative Gemini API, boosting alignment accuracy to over 85%.</li>
+        <li>Designed a real-time resume editor using HTML, CSS, and JavaScript, with optimized backend processing in MySQL for efficient data handling.</li>
+        <li>Delivered data insights through dashboards and structured reports to guide user progress.</li>
+        <li>Engineered a resume challenge platform simulating coding interviews, including automated scoring and progress tracking.</li>
+        <li>Open-sourced on GitHub and engaged with contributors for pull request reviews.</li>
+      </ul>
+      <div class="entry-header"><p class="entry-title">Personal Portfolio Website</p><p class="entry-date">March 2024 - Present</p></div>
+      <ul class="bullet-list">
+        <li>Developed a React.js and Tailwind CSS portfolio hosted on AWS S3 with Route 53 SSL for secure, high-availability delivery.</li>
+        <li>Implemented a clean, minimalist design with intuitive navigation to enhance user experience.</li>
+        <li>Maintained continuous updates to reflect new skills and projects, keeping it dynamic despite being a static frontend site.</li>
+        <li>Attracted over 18,000+ views in two months through organic reach and community engagement.</li>
+      </ul>
+    </section>
+  </div>
+</body>
+</html>

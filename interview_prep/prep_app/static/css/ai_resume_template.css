@@ -1,0 +1,479 @@
+/* AI Resume Builder A4 Template - Exact styling from live_preview_template.html */
+
+/* --- Preview pane base --- */
+.ai-resume-preview {
+  overflow: auto;
+  padding: 14px;
+  background: #f5f5f5;
+  position: relative;
+}
+
+.ai-resume-sheet {
+  margin: 0 auto 20px;
+  transition: transform 0.2s ease;
+  transform-origin: top center;
+}
+
+/* Zoom levels */
+.ai-resume-sheet.zoom-75 {
+  transform: scale(0.75);
+}
+
+.ai-resume-sheet.zoom-100 {
+  transform: scale(1.0);
+}
+
+.ai-resume-sheet.zoom-125 {
+  transform: scale(1.25);
+}
+
+.ai-resume-sheet.zoom-150 {
+  transform: scale(1.5);
+}
+
+/* A4 page styling - exact from live_preview_template.html */
+.ai-resume-page {
+  box-sizing: border-box;
+  width: 595.28pt;
+  height: 841.89pt;
+  padding: 28.2pt 15.5pt 32pt 21.5pt;
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+  page-break-after: always;
+  margin-bottom: 20px;
+}
+
+@media screen {
+  .ai-resume-page {
+    box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 6px 30px rgba(0,0,0,.12);
+  }
+}
+
+/* Print styles - exact A4 */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  .ai-resume-sheet {
+    transform: none !important;
+  }
+  
+  .ai-resume-page {
+    box-shadow: none;
+    margin-bottom: 0;
+  }
+}
+
+/* Resume template styles - EXACT from live_preview_template.html */
+/* Original AI resume classes */
+.ai-resume-name {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 32pt;
+  line-height: 1.05;
+  text-align: center;
+  margin: 0;
+  color: #000;
+}
+
+/* Live template classes - matching live_preview_template.html */
+/* Page container with A4 dimensions */
+.page {
+  box-sizing: border-box;
+  width: 595.28pt;
+  height: 841.89pt;
+  padding: 28.2pt 15.5pt 32pt 21.5pt;
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+  page-break-after: always;
+  margin-bottom: 20px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 6px 30px rgba(0,0,0,.12);
+}
+
+.name {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 32pt;
+  line-height: 1.05;
+  text-align: center;
+  margin: 0;
+  color: #000;
+}
+
+.ai-resume-role {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 19.5pt;
+  text-align: center;
+  margin: 0.6em 0 0;
+  color: #000;
+}
+
+.ai-resume-contact-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
+  column-gap: 12pt;
+  margin-top: 0.8em;
+}
+
+.ai-resume-contact-row .left,
+.ai-resume-contact-row .center,
+.ai-resume-contact-row .right {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 11pt;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-width: 0;
+  color: #000;
+}
+
+.ai-resume-contact-row .left {
+  justify-self: start;
+}
+
+.ai-resume-contact-row .center {
+  justify-self: center;
+}
+
+.ai-resume-contact-row .right {
+  justify-self: end;
+  text-align: right;
+}
+
+.ai-resume-contact-row a {
+  color: #000;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ai-resume-section {
+  margin-top: 1.35em;
+}
+
+.ai-resume-section-title {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 14pt;
+  text-transform: uppercase;
+  margin: 0;
+  padding-bottom: 6pt;
+  border-bottom: 1px solid #000;
+  color: #000;
+}
+
+.ai-resume-summary {
+  margin-top: 8pt;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 14pt;
+  line-height: 1.14;
+  color: #000;
+}
+
+.ai-resume-skills-list {
+  list-style: none;
+  margin: 8pt 0 0;
+  padding: 0;
+}
+
+.ai-resume-skills-list li {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 11pt;
+  line-height: 1.2;
+  color: #000;
+}
+
+.ai-resume-skills-list b {
+  font-weight: 700;
+}
+
+.ai-resume-edu-degree,
+.ai-resume-edu-institution {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 14pt;
+  margin: 0.6em 0 0;
+  color: #000;
+}
+
+.ai-resume-edu-meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 11pt;
+  color: #000;
+}
+
+.ai-resume-entry-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12pt;
+  margin-top: 0.65em;
+  align-items: flex-start;
+}
+
+.ai-resume-entry-title {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 14pt;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: #000;
+}
+
+.ai-resume-entry-date {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 11pt;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  margin: 0;
+  color: #000;
+}
+
+.ai-resume-bullet-list {
+  list-style: none;
+  margin: 6pt 0 0;
+  padding: 0;
+}
+
+.ai-resume-bullet-list li {
+  position: relative;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 12pt;
+  line-height: 1.22;
+  margin: 0.25em 0 0;
+  padding-left: 52.5pt;
+  color: #000;
+}
+
+.ai-resume-bullet-list li::before {
+  content: "•";
+  position: absolute;
+  left: 38.52pt;
+  top: 0;
+  font-size: 12pt;
+}
+
+/* Helper classes */
+.ai-resume-placeholder {
+  color: #999;
+  font-style: italic;
+}
+
+/* === COMPLETE LIVE TEMPLATE STYLES === */
+/* These match exactly with live_preview_template.html */
+
+.role {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 19.5pt;
+  text-align: center;
+  margin: 0.6em 0 0;
+  color: #000;
+}
+
+.contact-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
+  column-gap: 12pt;
+  margin-top: 0.8em;
+}
+
+.contact-row .left,
+.contact-row .center,
+.contact-row .right {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 11pt;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-width: 0;
+  color: #000;
+}
+
+.contact-row .left {
+  justify-self: start;
+}
+
+.contact-row .center {
+  justify-self: center;
+}
+
+.contact-row .right {
+  justify-self: end;
+  text-align: right;
+}
+
+.contact-row a {
+  color: #000;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.section {
+  margin-top: 1.35em;
+}
+
+.section-title {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 14pt;
+  text-transform: uppercase;
+  margin: 0;
+  padding-bottom: 6pt;
+  border-bottom: 1px solid #000;
+  color: #000;
+}
+
+.summary {
+  margin-top: 8pt;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 14pt;
+  line-height: 1.14;
+  color: #000;
+}
+
+.skills-list {
+  list-style: none;
+  margin: 8pt 0 0;
+  padding: 0;
+}
+
+.skills-list li {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 11pt;
+  line-height: 1.2;
+  color: #000;
+}
+
+.skills-list b {
+  font-weight: 700;
+}
+
+.edu-degree,
+.edu-institution {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 14pt;
+  margin: 0.6em 0 0;
+  color: #000;
+}
+
+.edu-meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 11pt;
+  color: #000;
+}
+
+.entry-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12pt;
+  margin-top: 0.65em;
+  align-items: flex-start;
+}
+
+.entry-title {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 14pt;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: #000;
+}
+
+.entry-date {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 11pt;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  margin: 0;
+  color: #000;
+}
+
+.bullet-list {
+  list-style: none;
+  margin: 6pt 0 0;
+  padding: 0;
+}
+
+.bullet-list li {
+  position: relative;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 12pt;
+  line-height: 1.22;
+  margin: 0.25em 0 0;
+  padding-left: 52.5pt;
+  color: #000;
+}
+
+.bullet-list li::before {
+  content: "•";
+  position: absolute;
+  left: 38.52pt;
+  top: 0;
+  font-size: 12pt;
+}
+
+.placeholder {
+  color: #999;
+  font-style: italic;
+}
+
+/* Zoom controls */
+.ai-resume-zoom-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.ai-resume-zoom-controls button {
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  margin: 0 2px;
+}
+
+.ai-resume-zoom-controls button:hover {
+  background: #f5f5f5;
+}
+
+.ai-resume-zoom-controls button.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+/* Custom sections styling */
+.ai-resume-custom-section {
+  margin-top: 1.35em;
+}
+
+.ai-resume-custom-section-title {
+  font-family: "Times New Roman", Times, serif;
+  font-weight: 700;
+  font-size: 14pt;
+  text-transform: uppercase;
+  margin: 0;
+  padding-bottom: 6pt;
+  border-bottom: 1px solid #000;
+  color: #000;
+}

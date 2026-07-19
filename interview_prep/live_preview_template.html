@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Resume Editor + Live Preview (A4)</title>
+<style>
+  /* --- App layout --- */
+  :root { --panel-bg:#fafafa; --border:#e5e5e5; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Times New Roman", serif; }
+  .app {
+    display: grid;
+    grid-template-columns: 42% 58%;
+    height: 100vh;
+  }
+  .editor {
+    border-right: 1px solid var(--border);
+    background: var(--panel-bg);
+    overflow: auto;
+  }
+  .editor .wrap { padding: 16px 18px 24px; max-width: 820px; margin: 0 auto; }
+  .editor h1 { font-size: 18px; margin: 0 0 8px; }
+  .editor h2 { font-size: 14px; margin: 18px 0 8px; border-top:1px solid var(--border); padding-top:12px; }
+  .row { display:grid; grid-template-columns: 140px 1fr; gap:10px; align-items: start; margin: 8px 0; }
+  .row label { font-size: 12px; color:#222; padding-top:6px; }
+  input[type="text"], textarea { width: 100%; box-sizing:border-box; border:1px solid #ccc; border-radius:6px; padding:10px 12px; font-size: 13px; background:#fff; }
+  textarea { min-height: 72px; resize: vertical; }
+  .hint { font-size: 11px; color:#666; margin: 4px 0 0; }
+  .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .muted { color:#666; font-size:12px; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; margin: 8px 0 2px; }
+  button { border:1px solid #bbb; background:#fff; border-radius:6px; padding:8px 10px; font-size:12px; cursor:pointer; }
+  button:hover { background:#f2f2f2; }
+
+  /* --- Preview pane --- */
+  .preview { overflow: auto; padding: 14px; }
+  .sheet { width: 595.28pt; margin: 0 auto 20px; }
+  .page { box-sizing: border-box; width: 595.28pt; height: 841.89pt; padding: 28.2pt 15.5pt 32pt 21.5pt; background: #fff; position:relative; overflow:hidden; page-break-after: always; }
+  @media screen { .page { box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 6px 30px rgba(0,0,0,.12); } }
+
+  /* --- Resume template (exact styling) --- */
+  @page { size: A4; margin: 0; }
+  .name { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:32pt; line-height:1.05; text-align:center; margin:0; color:#000; }
+  .role { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:19.5pt; text-align:center; margin:0.6em 0 0; color:#000; }
+  .contact-row { display:grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; column-gap: 12pt; margin-top: 0.8em; }
+  .contact-row .left,.contact-row .center,.contact-row .right { font-family: "Times New Roman", Times, serif; font-size:11pt; line-height:1.2; white-space: nowrap; min-width: 0; color:#000; }
+  .contact-row .left { justify-self: start; }
+  .contact-row .center { justify-self: center; }
+  .contact-row .right { justify-self: end; text-align: right; }
+  .contact-row a { color:#000; text-decoration:none; overflow-wrap:anywhere; word-break:break-word; }
+  .section { margin-top:1.35em; }
+  .section-title { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:14pt; text-transform:uppercase; margin:0; padding-bottom:6pt; border-bottom:1px solid #000; color:#000; }
+  .summary { margin-top:8pt; font-family: "Times New Roman", Times, serif; font-size:14pt; line-height:1.14; color:#000; }
+  .skills-list { list-style:none; margin:8pt 0 0; padding:0; }
+  .skills-list li { font-family: "Times New Roman", Times, serif; font-size:11pt; line-height:1.2; color:#000; }
+  .skills-list b { font-weight:700; }
+  .edu-degree,.edu-institution { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:14pt; margin:0.6em 0 0; color:#000; }
+  .edu-meta { display:flex; justify-content:space-between; font-family:"Times New Roman", Times, serif; font-size:11pt; color:#000; }
+  .entry-header { display:flex; justify-content:space-between; gap:12pt; margin-top:0.65em; align-items:flex-start; }
+  .entry-title { font-family: "Times New Roman", Times, serif; font-weight:700; font-size:14pt; flex:1 1 auto; min-width:0; margin:0; color:#000; }
+  .entry-date { font-family: "Times New Roman", Times, serif; font-size:11pt; white-space:nowrap; flex:0 0 auto; margin:0; color:#000; }
+  .bullet-list { list-style:none; margin:6pt 0 0; padding:0; }
+  .bullet-list li { position:relative; font-family:"Times New Roman", Times, serif; font-size:12pt; line-height:1.22; margin:0.25em 0 0; padding-left:52.5pt; color:#000; }
+  .bullet-list li::before { content:"•"; position:absolute; left:38.52pt; top:0; font-size:12pt; }
+
+  /* helper */
+  .placeholder { color:#999; font-style:italic; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- ================= Editor (left) ================= -->
+    <div class="editor">
+      <div class="wrap">
+        <h1>Resume Data</h1>
+        <div class="row"><label>Full Name</label><input id="name" type="text" placeholder="e.g., Chi Fung Hillman Chan" /></div>
+        <div class="row"><label>Role / Title</label><input id="role" type="text" placeholder="e.g., Graduate Software Engineer" /></div>
+
+        <h2>Contacts</h2>
+        <div class="grid-2">
+          <div class="row"><label>Email</label><input id="email" type="text" placeholder="e.g., name@email.com" /></div>
+          <div class="row"><label>Phone</label><input id="phone" type="text" placeholder="e.g., 07123 456789" /></div>
+          <div class="row"><label>Location (Right)</label><input id="location" type="text" placeholder="City, Country" /></div>
+          <div class="row"><label>GitHub (Left)</label><input id="github" type="text" placeholder="https://github.com/username" /></div>
+          <div class="row"><label>Website (Right)</label><input id="website" type="text" placeholder="yourdomain.com" /></div>
+        </div>
+
+        <h2>Summary</h2>
+        <div class="row"><label>Summary Text</label><textarea id="summary" placeholder="Short paragraph about you"></textarea></div>
+
+        <h2>Skills (labels fixed, values comma-separated)</h2>
+        <div class="row"><label>Programming</label><input id="skills_programming" type="text" /></div>
+        <div class="row"><label>Database</label><input id="skills_database" type="text" /></div>
+        <div class="row"><label>AI/ML Tools</label><input id="skills_aiml" type="text" /></div>
+        <div class="row"><label>Tools & Methodologies</label><input id="skills_tools" type="text" /></div>
+        <div class="row"><label>Soft Skills</label><input id="skills_soft" type="text" /></div>
+        <div class="row"><label>Additional</label><input id="skills_additional" type="text" /></div>
+
+        <h2>Education</h2>
+        <div class="row"><label>Degree</label><input id="edu_degree" type="text" /></div>
+        <div class="row"><label>Institution</label><input id="edu_institution" type="text" /></div>
+        <div class="grid-2">
+          <div class="row"><label>Dates (left)</label><input id="edu_dates" type="text" placeholder="e.g., Sep 2021 - Jul 2024" /></div>
+          <div class="row"><label>Location (right)</label><input id="edu_loc" type="text" placeholder="City, Country" /></div>
+        </div>
+
+        <h2>Experience (three entries max for now)</h2>
+        <div class="controls">
+          <button type="button" onclick="addExp()">+ Add Experience</button>
+          <span class="muted">(Title, Date on right, bullets newline-separated)</span>
+        </div>
+        <div id="exp"></div>
+
+        <h2>Projects (three entries max for now)</h2>
+        <div class="controls">
+          <button type="button" onclick="addProj()">+ Add Project</button>
+          <span class="muted">(Title, Date on right, bullets newline-separated)</span>
+        </div>
+        <div id="proj"></div>
+
+      </div>
+    </div>
+
+    <!-- ================= Preview (right) ================= -->
+    <div class="preview">
+      <div id="preview-root" class="sheet"><!-- pages will be rendered here --></div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const state = {
+    name: '', role: '', email:'', phone:'', location:'', github:'', website:'',
+    summary:'',
+    skills: { programming:'', database:'', aiml:'', tools:'', soft:'', additional:'' },
+    education: { degree:'', institution:'', dates:'', loc:'' },
+    experience: [], // {title:'', date:'', bullets:'line1\nline2'}
+    projects: []    // same shape
+  };
+
+  const q = (sel) => document.querySelector(sel);
+  const previewRoot = q('#preview-root');
+
+  // Helpers
+  const esc = (s) => (s==null? '': String(s));
+  const textOrPlaceholder = (s, ph) => s && s.trim().length? esc(s) : `<span class="placeholder">${ph}</span>`;
+  const splitBullets = (s) => esc(s).split(/\r?\n/).map(t=>t.trim()).filter(Boolean);
+
+  function bindInput(id, path){
+    const el = q(id);
+    el.addEventListener('input', ()=>{
+      const keys = path.split('.');
+      let obj = state; for(let i=0;i<keys.length-1;i++){ obj = obj[keys[i]]; }
+      obj[keys[keys.length-1]] = el.value;
+      render();
+    });
+  }
+
+  // Build Experience / Project editors
+  function addExp(){ addEntry('experience'); }
+  function addProj(){ addEntry('projects'); }
+  window.addExp = addExp; window.addProj = addProj;
+
+  function addEntry(bucket){
+    if(state[bucket].length >= 3) return;
+    state[bucket].push({title:'', date:'', bullets:''});
+    renderEditors();
+    render();
+  }
+  function removeEntry(bucket, idx){ state[bucket].splice(idx,1); renderEditors(); render(); }
+
+  function renderEditors(){
+    const buckets = [['experience','#exp','Experience'], ['projects','#proj','Projects']];
+    for(const [key, mountSel, label] of buckets){
+      const mount = q(mountSel);
+      mount.innerHTML = state[key].map((e,i)=>`
+        <div style="border:1px solid var(--border); background:#fff; border-radius:8px; padding:12px; margin:8px 0;">
+          <div class="row"><label>${label} ${i+1} – Title</label><input type="text" value="${e.title}" oninput="editField('${key}',${i},'title',this.value)" /></div>
+          <div class="row"><label>${label} ${i+1} – Date (right)</label><input type="text" value="${e.date}" oninput="editField('${key}',${i},'date',this.value)" /></div>
+          <div class="row"><label>${label} ${i+1} – Bullets</label><textarea oninput="editField('${key}',${i},'bullets',this.value)" placeholder="One bullet per line">${e.bullets}</textarea></div>
+          <div class="controls"><button type="button" onclick="removeEntry('${key}',${i})">Remove</button></div>
+        </div>
+      `).join('');
+    }
+  }
+  window.editField = (bucket, i, field, val)=>{ state[bucket][i][field]=val; render(); };
+  window.removeEntry = removeEntry;
+
+  // Render resume to pages
+  function render(){
+    // Build source HTML (unpaginated)
+    const html = `
+      <div id="source">
+        <h1 class="name">${textOrPlaceholder(state.name,'Your Full Name')}</h1>
+        <p class="role">${textOrPlaceholder(state.role,'Role / Title')}</p>
+        <div class="contact-row">
+          <div class="left">${textOrPlaceholder(state.email,'email@example.com')}</div>
+          <div class="center">${textOrPlaceholder(state.phone,'+44 xxxx xxx xxx')}</div>
+          <div class="right">${textOrPlaceholder(state.location,'City, Country')}</div>
+        </div>
+        <div class="contact-row">
+          <div class="left">GitHub: ${state.github? `<a href="${state.github}">${esc(state.github)}</a>`: '<span class="placeholder">https://github.com/username</span>'}</div>
+          <div class="center"></div>
+          <div class="right">Website: ${state.website? `<a href="${state.website}">${esc(state.website)}</a>`: '<span class="placeholder">yourdomain.com</span>'}</div>
+        </div>
+
+        <section class="section">
+          <h2 class="section-title">SUMMARY</h2>
+          <p class="summary">${textOrPlaceholder(state.summary,'Short summary paragraph')}</p>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">SKILLS</h2>
+          <ul class="skills-list">
+            <li><b>Programming:</b> ${textOrPlaceholder(state.skills.programming,'')}</li>
+            <li><b>Database:</b> ${textOrPlaceholder(state.skills.database,'')}</li>
+            <li><b>AI/ML Tools:</b> ${textOrPlaceholder(state.skills.aiml,'')}</li>
+            <li><b>Tools &amp; Methodologies:</b> ${textOrPlaceholder(state.skills.tools,'')}</li>
+            <li><b>Soft Skills:</b> ${textOrPlaceholder(state.skills.soft,'')}</li>
+            <li><b>Additional:</b> ${textOrPlaceholder(state.skills.additional,'')}</li>
+          </ul>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">EDUCATION</h2>
+          <p class="edu-degree">${textOrPlaceholder(state.education.degree,'')}</p>
+          <p class="edu-institution">${textOrPlaceholder(state.education.institution,'')}</p>
+          <div class="edu-meta"><div>${textOrPlaceholder(state.education.dates,'')}</div><div>${textOrPlaceholder(state.education.loc,'')}</div></div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">EXPERIENCE</h2>
+          ${state.experience.map(e => `
+            <div class="entry-header"><p class="entry-title">${textOrPlaceholder(e.title,'')}</p><p class="entry-date">${textOrPlaceholder(e.date,'')}</p></div>
+            ${splitBullets(e.bullets).length? `<ul class="bullet-list">${splitBullets(e.bullets).map(b=>`<li>${b}</li>`).join('')}</ul>`: ''}
+          `).join('')}
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">PROJECTS</h2>
+          ${state.projects.map(p => `
+            <div class="entry-header"><p class="entry-title">${textOrPlaceholder(p.title,'')}</p><p class="entry-date">${textOrPlaceholder(p.date,'')}</p></div>
+            ${splitBullets(p.bullets).length? `<ul class="bullet-list">${splitBullets(p.bullets).map(b=>`<li>${b}</li>`).join('')}</ul>`: ''}
+          `).join('')}
+        </section>
+      </div>`;
+
+    // Mount and paginate
+    previewRoot.innerHTML = '';
+    const sourceHost = document.createElement('div');
+    sourceHost.innerHTML = html;
+
+    paginate(sourceHost.firstElementChild);
+  }
+
+  function measurePt(pt){
+    const probe = document.createElement('div');
+    probe.style.position='absolute'; probe.style.visibility='hidden'; probe.style.height = pt + 'pt';
+    document.body.appendChild(probe);
+    const h = probe.getBoundingClientRect().height; probe.remove();
+    return h;
+  }
+
+  function paginate(source){
+    const PAGE_H_PX = measurePt(841.89);
+    // create a temp page to read paddings for inner height
+    const temp = document.createElement('div'); temp.className = 'page'; temp.style.visibility='hidden';
+    previewRoot.appendChild(temp); const cs = getComputedStyle(temp);
+    const padTop = parseFloat(cs.paddingTop)||0, padBottom = parseFloat(cs.paddingBottom)||0;
+    const innerH = PAGE_H_PX - padTop - padBottom; previewRoot.removeChild(temp);
+    const reserve = measurePt(10);
+
+    // collect nodes to place (elements and non-empty text wrapped)
+    const nodes = Array.from(source.childNodes).filter(n => (
+      n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && n.textContent.trim().length)
+    ));
+
+    let page, inner;
+    function newPage(){
+      page = document.createElement('div'); page.className = 'page';
+      inner = document.createElement('div'); inner.className = 'page-inner'; page.appendChild(inner);
+      previewRoot.appendChild(page);
+    }
+    newPage();
+
+    for(const node of nodes){
+      const el = (node.nodeType === Node.TEXT_NODE)? (()=>{const w=document.createElement('div'); w.textContent=node.textContent; return w;})() : node;
+      inner.appendChild(el);
+      // force layout
+      void inner.offsetHeight;
+      if(inner.scrollHeight > (innerH - reserve)){
+        inner.removeChild(el);
+        newPage();
+        inner.appendChild(el);
+        void inner.offsetHeight;
+      }
+    }
+  }
+
+  // Bind basics
+  bindInput('#name','name'); bindInput('#role','role'); bindInput('#email','email'); bindInput('#phone','phone'); bindInput('#location','location'); bindInput('#github','github'); bindInput('#website','website');
+  bindInput('#summary','summary');
+  bindInput('#skills_programming','skills.programming'); bindInput('#skills_database','skills.database'); bindInput('#skills_aiml','skills.aiml'); bindInput('#skills_tools','skills.tools'); bindInput('#skills_soft','skills.soft'); bindInput('#skills_additional','skills.additional');
+  bindInput('#edu_degree','education.degree'); bindInput('#edu_institution','education.institution'); bindInput('#edu_dates','education.dates'); bindInput('#edu_loc','education.loc');
+
+  // Initial editors
+  renderEditors();
+
+  // Initial render after fonts settle to get accurate pagination
+  function ready(fn){
+    const run = ()=> requestAnimationFrame(()=> requestAnimationFrame(fn));
+    if(document.fonts && document.fonts.ready){ document.fonts.ready.then(run).catch(run); } else { window.addEventListener('load', run, {once:true}); }
+  }
+  ready(render);
+  window.addEventListener('resize', ()=>{ render(); }, {passive:true});
+})();
+</script>
+</body>
+</html>
