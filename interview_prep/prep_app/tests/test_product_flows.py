@@ -1,5 +1,6 @@
 import io
 import json
+import zipfile
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -31,6 +32,38 @@ def docx_upload(text_lines, name='candidate.docx'):
     return SimpleUploadedFile(
         name,
         output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+
+
+def zip_bomb_docx(declared_mb=40, name='bomb.docx'):
+    """A structurally valid DOCX whose XML expands far past the upload limit.
+
+    Highly repetitive XML compresses at roughly 1000:1, so this lands well
+    under the 10MB upload cap while declaring ~40MB of decompressed content.
+    """
+    body = '<w:p><w:r><w:t>' + ('A' * (declared_mb * 1024 * 1024)) + '</w:t></w:r></w:p>'
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        archive.writestr(
+            '[Content_Types].xml',
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="xml" ContentType="application/xml"/></Types>',
+        )
+        archive.writestr(
+            '_rels/.rels',
+            '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"'
+            ' Target="word/document.xml"/></Relationships>',
+        )
+        archive.writestr(
+            'word/document.xml',
+            '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            f'<w:body>{body}</w:body></w:document>',
+        )
+    return SimpleUploadedFile(
+        name,
+        buf.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     )
 
@@ -119,6 +152,23 @@ class CVImportFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'valid PDF signature')
         self.assertFalse(CandidateDocument.objects.exists())
+
+    def test_upload_rejects_a_decompression_bomb_that_passes_the_size_check(self):
+        """A DOCX is a zip, so the 10MB cap bounds only the compressed bytes.
+
+        Without a decompressed-size ceiling, a sub-1MB upload that clears every
+        other validation layer expands to gigabytes during parsing and
+        OOM-kills the serverless function.
+        """
+        bomb = zip_bomb_docx()
+        self.assertLess(bomb.size, 10 * 1024 * 1024, 'bomb must pass the upload size gate')
+
+        response = self.client.post(reverse('cv_import'), {'cv_file': bomb})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'over the')
+        self.assertFalse(CandidateDocument.objects.exists())
+        self.assertFalse(CareerMemoryFact.objects.filter(user=self.user).exists())
 
     def test_review_actions_are_owner_scoped_and_support_edit_reject_delete(self):
         fact = CareerMemoryFact.objects.create(
