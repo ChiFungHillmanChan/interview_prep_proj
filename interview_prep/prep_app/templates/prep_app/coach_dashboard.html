@@ -1,0 +1,249 @@
+{% extends 'prep_app/base.html' %}
+
+{% block title %}Personal Interview Coach - AceInterview{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+  <section class="bg-gradient-to-br from-blue-600 to-blue-800 text-white">
+    <div class="container mx-auto px-6 py-16">
+      <div class="max-w-4xl">
+        <div class="mb-4 inline-flex items-center rounded-full bg-white/15 px-4 py-2 text-sm font-medium">
+          Your private Career Memory
+        </div>
+        <h1 class="text-4xl font-bold md:text-5xl">An interview coach that remembers the real you.</h1>
+        <p class="mt-5 max-w-3xl text-lg text-blue-100">
+          Practice against a real job, build evidence over time, and get an honest assessment of what you have demonstrated—not what an AI guesses.
+        </p>
+        <div class="mt-7 flex flex-wrap gap-3">
+          <a href="{% url 'cv_import' %}" class="rounded-lg bg-white px-5 py-3 font-semibold text-blue-700 hover:bg-blue-50">Import a CV</a>
+          <a href="{% url 'resume_builder' %}" class="rounded-lg border border-blue-300 px-5 py-3 font-semibold text-white hover:bg-white/10">Build a truthful resume</a>
+          <a href="{% url 'privacy_center' %}" class="rounded-lg border border-blue-300 px-5 py-3 font-semibold text-white hover:bg-white/10">Privacy controls</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="container mx-auto px-6 py-10">
+    <div class="mb-10 grid gap-5 md:grid-cols-3">
+      <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+        <p class="text-sm font-medium text-gray-500">Skills remembered</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900">{{ skills|length }}</p>
+        <p class="mt-1 text-sm text-gray-500">{{ assessed_skills }} assessed through answers</p>
+      </div>
+      <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+        <p class="text-sm font-medium text-gray-500">Career memories</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900">{{ memory_count }}</p>
+        <p class="mt-1 text-sm text-gray-500">{{ pending_memory_count }} awaiting your review</p>
+      </div>
+      <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+        <p class="text-sm font-medium text-gray-500">Completed interviews</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900">{{ completed_sessions }}</p>
+        <p class="mt-1 text-sm text-gray-500">Evidence becomes stronger over time</p>
+      </div>
+    </div>
+
+    <div class="grid gap-8 lg:grid-cols-5">
+      <div class="space-y-8 lg:col-span-3">
+        <section class="rounded-xl bg-white p-7 shadow-sm ring-1 ring-gray-100">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">Start practising</p>
+              <h2 class="mt-1 text-2xl font-bold text-gray-900">Create a tailored interview</h2>
+              <p class="mt-2 text-gray-600">Paste a job description for the most personal questions, or practise against a role alone.</p>
+            </div>
+            <div class="rounded-full bg-blue-100 p-3 text-blue-600">
+              <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 4v-4z"/></svg>
+            </div>
+          </div>
+          <form method="post" action="{% url 'coach_start' %}" class="mt-6 space-y-5">
+            {% csrf_token %}
+            <div>
+              <label class="text-sm font-medium text-gray-700" for="{{ start_form.target_role.id_for_label }}">Target role</label>
+              {{ start_form.target_role }}
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-700" for="{{ start_form.job_description.id_for_label }}">Job description</label>
+              {{ start_form.job_description }}
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-700" for="{{ start_form.focus_areas.id_for_label }}">Anything you want to focus on?</label>
+              {{ start_form.focus_areas }}
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label class="text-sm font-medium text-gray-700" for="{{ start_form.category.id_for_label }}">Interview category</label>
+                {{ start_form.category }}
+              </div>
+              <div>
+                <label class="text-sm font-medium text-gray-700" for="{{ start_form.language.id_for_label }}">Interview language</label>
+                {{ start_form.language }}
+              </div>
+            </div>
+            <button class="w-full rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700" type="submit">
+              Start personal interview
+            </button>
+          </form>
+        </section>
+
+        <section class="rounded-xl bg-white p-7 shadow-sm ring-1 ring-gray-100">
+          <h2 class="text-xl font-bold text-gray-900">Your skills and evidence</h2>
+          <p class="mt-1 text-sm text-gray-600">Self-rating is context. The coach keeps its assessment separate until you demonstrate the skill.</p>
+
+          <div class="mt-5 space-y-3">
+            {% for skill in skills %}
+              <div class="flex flex-col justify-between gap-3 rounded-lg border border-gray-200 p-4 sm:flex-row sm:items-center">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="font-semibold text-gray-900">{{ skill.name }}</h3>
+                    <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600">Self: {{ skill.get_self_level_display }}</span>
+                    {% if skill.assessment_level != 'not_assessed' %}
+                      <span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">Coach: {{ skill.get_assessment_level_display }}</span>
+                    {% endif %}
+                  </div>
+                  {% if skill.evidence %}<p class="mt-2 text-sm text-gray-600">{{ skill.evidence }}</p>{% endif %}
+                  <p class="mt-1 text-xs text-gray-400">{{ skill.answers_count }} assessed answer{{ skill.answers_count|pluralize }} · confidence {{ skill.get_assessment_confidence_display|lower }}</p>
+                </div>
+                <form method="post" action="{% url 'coach_skill_delete' skill.id %}">
+                  {% csrf_token %}
+                  <button class="text-sm font-medium text-red-500 hover:text-red-700" type="submit">Remove</button>
+                </form>
+              </div>
+            {% empty %}
+              <div class="rounded-lg border-2 border-dashed border-gray-200 p-6 text-center text-gray-500">Add your first skill so the coach knows where to begin.</div>
+            {% endfor %}
+          </div>
+
+          <details class="mt-5 rounded-lg bg-gray-50 p-4">
+            <summary class="cursor-pointer font-semibold text-blue-600">+ Add or update a skill</summary>
+            <form method="post" action="{% url 'coach_skill_add' %}" class="mt-4 grid gap-4 md:grid-cols-2">
+              {% csrf_token %}
+              <div>
+                <label class="text-sm font-medium text-gray-700">Skill</label>
+                {{ skill_form.name }}
+              </div>
+              <div>
+                <label class="text-sm font-medium text-gray-700">Your current view</label>
+                {{ skill_form.self_level }}
+              </div>
+              <div class="md:col-span-2">
+                <label class="text-sm font-medium text-gray-700">Evidence</label>
+                {{ skill_form.evidence }}
+              </div>
+              <button class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 md:col-span-2" type="submit">Save skill</button>
+            </form>
+          </details>
+        </section>
+      </div>
+
+      <div class="space-y-8 lg:col-span-2">
+        <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+          <h2 class="text-xl font-bold text-gray-900">Coaching preferences</h2>
+          <form method="post" action="{% url 'coach_profile_update' %}" class="mt-5 space-y-4">
+            {% csrf_token %}
+            {% for field in profile_form %}
+              <div>
+                <label class="text-sm font-medium text-gray-700" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}<p class="mt-1 text-xs text-red-600">{{ field.errors|striptags }}</p>{% endif %}
+              </div>
+            {% endfor %}
+            <button class="w-full rounded-lg border border-blue-600 px-4 py-2 font-semibold text-blue-600 hover:bg-blue-50" type="submit">Save preferences</button>
+          </form>
+        </section>
+
+        <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-bold text-gray-900">Career Memory</h2>
+            <span class="text-xs text-gray-400">You stay in control</span>
+          </div>
+          <div class="mt-5 space-y-4">
+            {% for fact in memory %}
+              <div class="rounded-lg border border-gray-200 p-4">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">{{ fact.get_category_display }}</span>
+                  <span class="text-xs text-gray-400">{{ fact.get_confidence_display }} confidence</span>
+                </div>
+                <p class="mt-3 text-sm text-gray-700">{{ fact.content }}</p>
+                {% if fact.evidence %}<p class="mt-2 rounded bg-gray-50 p-2 text-xs text-gray-500"><strong>Evidence:</strong> {{ fact.evidence|truncatechars:180 }}</p>{% endif %}
+                <p class="mt-2 text-xs text-gray-400">Source: {{ fact.source_label|default:fact.get_source_type_display }} · {{ fact.get_review_status_display }}</p>
+                <div class="mt-3 flex flex-wrap gap-3">
+                  <form method="post" action="{% url 'coach_memory_confirm' fact.id %}">
+                    {% csrf_token %}
+                    <button class="text-xs font-semibold {% if fact.user_confirmed %}text-green-600{% else %}text-blue-600{% endif %}" type="submit">
+                      {% if fact.user_confirmed %}✓ Confirmed{% else %}Confirm this{% endif %}
+                    </button>
+                  </form>
+                  <a class="text-xs font-semibold text-blue-600" href="{% url 'coach_memory_edit' fact.id %}">Edit</a>
+                  {% if fact.review_status == 'pending' %}
+                    <form method="post" action="{% url 'coach_memory_reject' fact.id %}">
+                      {% csrf_token %}<button class="text-xs font-semibold text-amber-600" type="submit">Reject</button>
+                    </form>
+                  {% endif %}
+                  <form method="post" action="{% url 'coach_memory_delete' fact.id %}">
+                    {% csrf_token %}
+                    <button class="text-xs font-semibold text-red-500" type="submit">Delete</button>
+                  </form>
+                </div>
+              </div>
+            {% empty %}
+              <p class="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">Your interview evidence will appear here. AI-created memories remain unconfirmed until you approve them.</p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+          <h2 class="text-xl font-bold text-gray-900">Progress and readiness</h2>
+          <p class="mt-1 text-sm text-gray-500">Scores reflect completed interview evidence, not self-ratings.</p>
+          <div class="mt-4 space-y-3">
+            {% for snapshot in readiness_history %}
+              <div class="rounded-lg border border-gray-200 p-4">
+                <div class="flex justify-between gap-3"><strong>{{ snapshot.session.target_role }}</strong><span class="text-xs text-gray-500">{{ snapshot.get_readiness_label_display }}</span></div>
+                <p class="mt-1 text-xs text-gray-500">Based on {{ snapshot.evidence_answer_count }} complete answer{{ snapshot.evidence_answer_count|pluralize }}</p>
+                <div class="mt-3 grid grid-cols-2 gap-2">
+                  {% for label, score in snapshot.dimension_scores.items %}
+                    <span class="text-xs text-gray-600">{{ label }}: {% if score != None %}{{ score }}/5{% else %}Not enough evidence{% endif %}</span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% empty %}<p class="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">Complete an interview to start a readiness history.</p>{% endfor %}
+          </div>
+          {% if dimension_trends %}
+            <div class="mt-4 border-t border-gray-100 pt-4">
+              <p class="text-sm font-semibold text-gray-700">Dimension trends across completed interviews</p>
+              <div class="mt-2 space-y-1">{% for dimension, values in dimension_trends.items %}<p class="text-xs text-gray-500">{{ dimension }}: {{ values|join:" → " }}</p>{% endfor %}</div>
+            </div>
+          {% endif %}
+          {% if target_role_gaps %}<p class="mt-4 text-sm text-amber-700"><strong>Target-role gaps:</strong> {{ target_role_gaps|join:", " }}</p>{% endif %}
+        </section>
+
+        {% if documents or resume_versions %}
+        <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+          <h2 class="text-xl font-bold text-gray-900">Documents and resume versions</h2>
+          <div class="mt-4 space-y-3">
+            {% for document in documents %}<div class="rounded-lg border p-3 text-sm"><strong>{{ document.original_name }}</strong><span class="ml-2 text-gray-500">{{ document.file_type }} · parsed securely</span></div>{% endfor %}
+            {% for resume in resume_versions %}<a class="block rounded-lg border p-3 text-sm hover:border-blue-300" href="{% url 'resume_editor' resume.id %}"><strong>{{ resume.title }}</strong><span class="ml-2 text-gray-500">{{ resume.coverage_percent }}% evidence coverage</span></a>{% endfor %}
+          </div>
+        </section>
+        {% endif %}
+
+        <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+          <h2 class="text-xl font-bold text-gray-900">Recent interviews</h2>
+          <div class="mt-4 space-y-3">
+            {% for interview in sessions %}
+              <a href="{% url 'coach_session' interview.id %}" class="block rounded-lg border border-gray-200 p-4 transition hover:border-blue-300 hover:bg-blue-50">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="font-semibold text-gray-900">{{ interview.target_role }}</p>
+                  <span class="rounded-full px-2 py-1 text-xs {% if interview.status == 'completed' %}bg-green-100 text-green-700{% else %}bg-amber-100 text-amber-700{% endif %}">{{ interview.get_status_display }}</span>
+                </div>
+                <p class="mt-1 text-sm text-gray-500">{{ interview.turns.count }} answer{{ interview.turns.count|pluralize }} · {{ interview.get_readiness_label_display }}</p>
+              </a>
+            {% empty %}
+              <p class="text-sm text-gray-500">No interviews yet.</p>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

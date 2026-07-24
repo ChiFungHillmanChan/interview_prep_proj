@@ -14,15 +14,12 @@
         preparation tools to increase your chances of landing your dream job.
       </p>
       <div class="flex justify-center gap-4">
-        <button
+        <a
           class="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+          href="{% if user.is_authenticated %}{% url 'coach_dashboard' %}{% else %}{% url 'login' %}?next={% url 'coach_dashboard' %}{% endif %}"
         >
-          <a
-            href="{% if user.is_authenticated %}{% url 'home' %}{% else %}{% url 'login' %}{% endif %}"
-          >
-            Get Started
-          </a>
-        </button>
+          Start Personal Interview
+        </a>
         <button
           class="bg-white text-blue-600 px-8 py-3 rounded-lg border border-blue-600 hover:bg-blue-50 transition-colors"
         >
@@ -102,9 +99,9 @@
             ></path>
           </svg>
         </div>
-        <h3 class="text-xl font-semibold mb-4">Interview Prep</h3>
+        <h3 class="text-xl font-semibold mb-4">Personal AI Interview Coach</h3>
         <p class="text-gray-600">
-          Practice with AI-powered mock interviews and get instant feedback.
+          Build a private Career Memory, practise adaptive questions, and get honest feedback based on evidence you actually demonstrate.
         </p>
       </div>
     </div>

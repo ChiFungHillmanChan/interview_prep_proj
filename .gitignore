@@ -30,3 +30,6 @@ ChiFungHillmanChan.docx
 **/.DS_Store
 .vscode/
 **/settings.local.json
+
+# ---- Local test artifacts ----
+output/

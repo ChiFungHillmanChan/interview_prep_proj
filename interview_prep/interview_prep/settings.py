@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 import os
 from decouple import config
+from django.core.exceptions import ImproperlyConfigured
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,13 +23,33 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('DJANGO_SECRET_KEY')
+# Vercel sets VERCEL=1 in every build and function invocation.
+ON_VERCEL = bool(os.environ.get('VERCEL'))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+# The default is False so that a forgotten environment variable fails closed
+# rather than exposing tracebacks and secrets on a deployed host.
+DEBUG = config('DEBUG', default=False, cast=bool)
+
+# A local-only default keeps first-run setup approachable. Production refuses it.
+_DEVELOPMENT_SECRET = 'aceinterview-local-development-key-change-before-deploying'
+SECRET_KEY = config('DJANGO_SECRET_KEY', default=_DEVELOPMENT_SECRET)
+if not DEBUG and SECRET_KEY == _DEVELOPMENT_SECRET:
+    raise ImproperlyConfigured('DJANGO_SECRET_KEY must be set when DEBUG=False')
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS', default='',
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()],
+)
+
+if ON_VERCEL:
+    # Preview deployments get a generated *.vercel.app hostname per commit, so
+    # the exact host is not knowable ahead of time.
+    ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS + ['.vercel.app']))
+    CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(
+        CSRF_TRUSTED_ORIGINS + ['https://*.vercel.app']
+    ))
 
 
 # Application definition
@@ -47,6 +69,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -62,6 +85,9 @@ X_FRAME_OPTIONS = 'DENY'
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=not DEBUG, cast=bool)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 
 # Session Security
 SESSION_COOKIE_SECURE = not DEBUG
@@ -94,12 +120,27 @@ WSGI_APPLICATION = 'interview_prep.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# SQLite is local-development only. A serverless deployment has a read-only
+# filesystem and no instance affinity, so production must use DATABASE_URL.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+if config('DATABASE_URL', default=''):
+    DATABASES['default'] = dj_database_url.config(
+        conn_max_age=config('DB_CONN_MAX_AGE', default=600, cast=int),
+        conn_health_checks=True,
+        ssl_require=True,
+    )
+    # Managed Postgres is reached through a transaction-mode connection pooler,
+    # which cannot hold the named cursors Django would otherwise open.
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
+elif ON_VERCEL:
+    raise ImproperlyConfigured(
+        'DATABASE_URL must be set on Vercel; the SQLite fallback is ephemeral.'
+    )
 
 
 # Password validation
@@ -140,16 +181,23 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
 ]
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = config('STATIC_ROOT', default=os.path.join(BASE_DIR, 'staticfiles'))
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-GEMINI_API_KEY = config('GEMINI_API_KEY')
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+INTERVIEW_COACH_USE_AI = config('INTERVIEW_COACH_USE_AI', default=True, cast=bool)
+CAREER_MEMORY_USE_AI = config('CAREER_MEMORY_USE_AI', default=True, cast=bool)
+INTERVIEW_COACH_MODEL = config('INTERVIEW_COACH_MODEL', default='gemini-2.5-flash-lite')
 
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = 'your-google-client-id'
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = 'your-google-client-secret'
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = config('GOOGLE_OAUTH_CLIENT_ID', default='')
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = config('GOOGLE_OAUTH_CLIENT_SECRET', default='')
 
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = 'home'
@@ -158,11 +206,13 @@ SOCIAL_AUTH_LOGIN_REDIRECT_URL = 'home'
 SOCIAL_AUTH_LOGIN_ERROR_URL = 'register'
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'Google'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = config('HOST_EMAIL')
-EMAIL_HOST_PASSWORD= config('HOST_PASSWORD')
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_HOST_USER = config('HOST_EMAIL', default='')
+EMAIL_HOST_PASSWORD = config('HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'noreply@localhost')
+PASSWORD_RESET_TIMEOUT = 60 * 60
 
-# Build Resume AI: default template to use when user does not upload one
-DEFAULT_RESUME_TEMPLATE_PATH = BASE_DIR / 'ChiFungHillmanChan.pdf'
+DATA_UPLOAD_MAX_MEMORY_SIZE = 11 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 11 * 1024 * 1024

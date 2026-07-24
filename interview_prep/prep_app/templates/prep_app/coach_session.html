@@ -1,0 +1,195 @@
+{% extends 'prep_app/base.html' %}
+{% load form_tags %}
+
+{% block title %}{{ session.target_role }} Practice - AceInterview{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+  <div class="border-b border-gray-200 bg-white">
+    <div class="container mx-auto flex flex-col justify-between gap-4 px-6 py-7 md:flex-row md:items-center">
+      <div>
+        <a href="{% url 'coach_dashboard' %}" class="text-sm font-medium text-blue-600 hover:text-blue-700">← Career Memory</a>
+        <h1 class="mt-2 text-3xl font-bold text-gray-900">{{ session.target_role }}</h1>
+        <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+          <span>{{ turns|length }} answer{{ turns|length|pluralize }}</span>
+          <span>·</span>
+          <span>{{ session.get_readiness_label_display }}</span>
+          <span>·</span><span>{{ session.get_category_display }}</span>
+          <span>·</span><span>{{ session.get_language_display }}</span>
+          <span class="rounded-full px-2.5 py-1 {% if session.status == 'completed' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}">{{ session.get_status_display }}</span>
+        </div>
+      </div>
+      {% if session.status == 'active' %}
+        <form method="post" action="{% url 'coach_finish' session.id %}">
+          {% csrf_token %}
+          <button class="rounded-lg border border-gray-300 bg-white px-5 py-2.5 font-semibold text-gray-700 hover:bg-gray-50" type="submit">Finish and assess</button>
+        </form>
+      {% else %}
+        <a href="{% url 'coach_dashboard' %}" class="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white hover:bg-blue-700">Start another interview</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="container mx-auto px-6 py-10">
+    {% if session.status == 'completed' %}
+      <section class="mb-8 rounded-xl border border-blue-200 bg-blue-50 p-7">
+        <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">Honest assessment</p>
+        <h2 class="mt-2 text-2xl font-bold text-gray-900">{{ session.get_readiness_label_display }}</h2>
+        <p class="mt-3 max-w-4xl text-gray-700">{{ session.summary }}</p>
+      </section>
+    {% endif %}
+
+    <div class="grid gap-8 lg:grid-cols-3">
+      <div class="space-y-7 lg:col-span-2">
+        {% if session.status == 'active' %}
+          <section class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
+            <div class="bg-gradient-to-r from-blue-600 to-blue-700 p-7 text-white">
+              <p class="text-sm font-semibold uppercase tracking-wide text-blue-100">Your next question</p>
+              <h2 class="mt-3 text-2xl font-semibold leading-relaxed">{{ session.current_question }}</h2>
+            </div>
+            <form method="post" action="{% url 'coach_answer' session.id %}" class="p-7">
+              {% csrf_token %}
+              <label class="text-sm font-semibold text-gray-800" for="{{ answer_form.answer.id_for_label }}">Your answer</label>
+              <p class="mb-3 mt-1 text-sm text-gray-500">Use your own experience. It is fine to say you have not done something—the coach will adjust.</p>
+              {{ answer_form.answer }}
+              <div class="mt-5 flex items-center justify-between gap-4">
+                <p class="text-xs text-gray-400">Assessment is based only on evidence in your answer.</p>
+                <button class="rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700" type="submit">Submit answer →</button>
+              </div>
+            </form>
+          </section>
+        {% endif %}
+
+        <section>
+          <h2 class="text-xl font-bold text-gray-900">Interview conversation</h2>
+          <div class="mt-5 space-y-6">
+            {% for turn in turns reversed %}
+              <article class="rounded-xl bg-white p-7 shadow-sm ring-1 ring-gray-100">
+                <div class="flex items-start gap-4">
+                  <div class="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">Q</div>
+                  <div>
+                    <p class="font-semibold leading-relaxed text-gray-900">{{ turn.question }}</p>
+                    <p class="mt-3 whitespace-pre-line text-gray-600">{{ turn.answer }}</p>
+                  </div>
+                </div>
+                <div class="mt-6 rounded-lg bg-gray-50 p-5">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="font-semibold text-gray-900">Coach feedback</h3>
+                    <span class="rounded-full bg-white px-2.5 py-1 text-xs text-gray-500 ring-1 ring-gray-200">{{ turn.get_assessment_confidence_display }} confidence</span>
+                  </div>
+                  <p class="mt-3 text-sm leading-relaxed text-gray-700">{{ turn.feedback }}</p>
+                  <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {% for label, score in turn.scores.items %}
+                      <div class="rounded-lg bg-white p-3 ring-1 ring-gray-200">
+                        <p class="text-xs text-gray-500">{{ label|humanize_key }}</p>
+                        {% if score %}
+                          <p class="mt-1 text-lg font-bold text-blue-600">{{ score }}<span class="text-xs font-normal text-gray-400">/5</span></p>
+                        {% else %}
+                          <p class="mt-1 text-xs font-medium text-gray-400">Not enough evidence</p>
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                  {% if turn.demonstrated_skills %}
+                    <div class="mt-4 flex flex-wrap gap-2">
+                      {% for skill in turn.demonstrated_skills %}<span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">Evidence: {{ skill }}</span>{% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </article>
+            {% empty %}
+              <div class="rounded-xl border-2 border-dashed border-gray-200 p-10 text-center text-gray-500">Your questions, answers and feedback will build up here.</div>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+
+      <aside class="space-y-7">
+        <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+          <h2 class="text-lg font-bold text-gray-900">Interview plan</h2>
+          <ol class="mt-4 space-y-2">
+            {% for section in session.plan_sections %}
+              <li class="flex items-center gap-2 text-sm {% if section.key == session.current_section %}font-semibold text-blue-700{% else %}text-gray-500{% endif %}">
+                <span class="h-2 w-2 rounded-full {% if section.key == session.current_section %}bg-blue-600{% else %}bg-gray-300{% endif %}"></span>{{ section.label }}
+              </li>
+            {% endfor %}
+          </ol>
+        </section>
+        <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+          <h2 class="text-lg font-bold text-gray-900">Interview focus</h2>
+          {% if session.focus_areas %}
+            <div class="mt-4 flex flex-wrap gap-2">
+              {% for focus in session.focus_areas %}<span class="rounded-full bg-blue-100 px-3 py-1.5 text-sm text-blue-700">{{ focus }}</span>{% endfor %}
+            </div>
+          {% else %}
+            <p class="mt-3 text-sm text-gray-500">Adaptive across the role requirements.</p>
+          {% endif %}
+          {% if session.job_description %}
+            <details class="mt-5 border-t border-gray-100 pt-4">
+              <summary class="cursor-pointer text-sm font-semibold text-blue-600">View job description</summary>
+              <p class="mt-3 max-h-64 overflow-auto whitespace-pre-line text-xs leading-relaxed text-gray-500">{{ session.job_description }}</p>
+            </details>
+          {% endif %}
+        </section>
+
+        <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+          <h2 class="text-lg font-bold text-gray-900">Skill evidence</h2>
+          <div class="mt-4 space-y-3">
+            {% for skill in skills %}
+              <div class="rounded-lg border border-gray-200 p-3">
+                <div class="flex items-center justify-between gap-2">
+                  <p class="text-sm font-semibold text-gray-800">{{ skill.name }}</p>
+                  <span class="text-xs text-gray-400">{{ skill.answers_count }} answer{{ skill.answers_count|pluralize }}</span>
+                </div>
+                <p class="mt-1 text-xs text-gray-500">{{ skill.get_assessment_level_display }} · {{ skill.get_assessment_confidence_display|lower }} confidence</p>
+              </div>
+            {% empty %}
+              <p class="text-sm text-gray-500">No skill evidence yet.</p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="text-lg font-bold text-gray-900">Memory used</h2>
+            <span class="text-xs text-gray-400">Editable</span>
+          </div>
+          <div class="mt-4 space-y-3">
+            {% for fact in memory %}
+              <div class="rounded-lg bg-gray-50 p-3">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-semibold uppercase tracking-wide text-blue-600">{{ fact.get_category_display }}</span>
+                  {% if fact.user_confirmed %}<span class="text-xs text-green-600">✓ confirmed</span>{% endif %}
+                </div>
+                <p class="mt-2 text-sm text-gray-700">{{ fact.content }}</p>
+                <div class="mt-3 flex gap-3">
+                  <form method="post" action="{% url 'coach_memory_confirm' fact.id %}">
+                    {% csrf_token %}<input type="hidden" name="next" value="{% url 'coach_session' session.id %}">
+                    <button class="text-xs font-semibold text-blue-600" type="submit">{% if fact.user_confirmed %}Unconfirm{% else %}Confirm{% endif %}</button>
+                  </form>
+                  <form method="post" action="{% url 'coach_memory_delete' fact.id %}">
+                    {% csrf_token %}<input type="hidden" name="next" value="{% url 'coach_session' session.id %}">
+                    <button class="text-xs font-semibold text-red-500" type="submit">Delete</button>
+                  </form>
+                </div>
+              </div>
+            {% empty %}
+              <p class="text-sm text-gray-500">The coach has not stored any interview evidence yet.</p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="rounded-xl border border-red-200 bg-white p-6">
+          <h2 class="text-lg font-bold text-gray-900">Delete this session</h2>
+          <p class="mt-2 text-sm text-gray-500">Your saved answers are deleted with the session. You decide whether its Career Memory suggestions are deleted too.</p>
+          <form method="post" action="{% url 'coach_session_delete' session.id %}" class="mt-4 space-y-3">
+            {% csrf_token %}
+            <label class="flex items-start gap-2 text-sm text-gray-600"><input class="mt-1" type="checkbox" name="delete_generated_memory"> Also delete memories generated by this session</label>
+            <button class="text-sm font-semibold text-red-600" type="submit">Delete session</button>
+          </form>
+        </section>
+      </aside>
+    </div>
+  </div>
+</div>
+{% endblock %}

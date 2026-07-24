@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "interview_prep/wsgi.py": {
+      "maxDuration": 120,
+      "excludeFiles": "{**/tests/**,**/test_*.py,db.sqlite3,django_server.log,resume_build_test.html,live_preview_template.html}"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{% extends 'prep_app/base.html' %}
+{% block title %}Edit Career Memory - AceInterview{% endblock %}
+{% block content %}
+<main class="min-h-screen bg-gray-50 px-6 py-14">
+  <div class="mx-auto max-w-2xl rounded-xl bg-white p-8 shadow-sm ring-1 ring-gray-100">
+    <a href="{% url 'coach_dashboard' %}" class="text-sm font-semibold text-blue-600">← Career Memory</a>
+    <h1 class="mt-4 text-2xl font-bold text-gray-900">Edit {{ fact.get_category_display|lower }}</h1>
+    <p class="mt-2 text-sm text-gray-500">Saving is an explicit confirmation. Keep the evidence excerpt tied to what you actually provided.</p>
+    <form method="post" class="mt-6 space-y-5">
+      {% csrf_token %}
+      {% for field in form %}<div><label class="text-sm font-semibold text-gray-700">{{ field.label }}</label>{{ field }}{% if field.errors %}<p class="mt-1 text-sm text-red-600">{{ field.errors|striptags }}</p>{% endif %}</div>{% endfor %}
+      <button class="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white" type="submit">Save and confirm</button>
+    </form>
+  </div>
+</main>
+{% endblock %}
