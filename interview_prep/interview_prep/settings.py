@@ -212,6 +212,16 @@ INTERVIEW_COACH_MODEL = config('INTERVIEW_COACH_MODEL', default='gemini-3.6-flas
 # deterministic fallback instead of timing out the whole request.
 AI_REQUEST_TIMEOUT_SECONDS = config('AI_REQUEST_TIMEOUT_SECONDS', default=20, cast=int)
 
+# Order matters: the first backend to return a user wins.
+# Without this setting Django defaults to ModelBackend alone, which matches on
+# username only — so an account could never sign in with its own email address,
+# and social_django's Google flow had no backend to authenticate against.
+AUTHENTICATION_BACKENDS = [
+    'prep_app.auth_backends.UsernameOrEmailBackend',
+    'social_core.backends.google.GoogleOAuth2',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = config('GOOGLE_OAUTH_CLIENT_ID', default='')
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = config('GOOGLE_OAUTH_CLIENT_SECRET', default='')
 
