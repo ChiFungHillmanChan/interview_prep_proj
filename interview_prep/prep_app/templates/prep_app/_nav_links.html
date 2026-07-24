@@ -1,0 +1,30 @@
+{% comment %}
+Primary navigation, defined once and included twice from base.html.
+
+The desktop row and the mobile panel previously kept separate copies of this
+list and drifted apart: the two menus offered different destinations, and two
+pairs of entries pointed at the same view under different names
+(cv_analysis/cv_import, ai_resume_upload/resume_builder). Keep this the only
+place a primary link is declared.
+
+Caller must pass `layout` as 'desktop' or 'mobile'.
+{% endcomment %}
+{% with url_name=request.resolver_match.url_name %}
+{% if layout == 'mobile' %}
+  {% with base="flex items-center rounded-lg px-4 py-3 text-base font-medium text-gray-700 transition-colors hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" on="bg-blue-50 text-blue-700" %}
+    <a href="{% url 'coach_dashboard' %}" class="{{ base }}{% if url_name == 'coach_dashboard' %} {{ on }}{% endif %}"{% if url_name == 'coach_dashboard' %} aria-current="page"{% endif %}>Interview coach</a>
+    <a href="{% url 'cv_import' %}" class="{{ base }}{% if url_name == 'cv_import' %} {{ on }}{% endif %}"{% if url_name == 'cv_import' %} aria-current="page"{% endif %}>Import CV</a>
+    <a href="{% url 'resume_builder' %}" class="{{ base }}{% if url_name == 'resume_builder' or url_name == 'resume_editor' %} {{ on }}{% endif %}"{% if url_name == 'resume_builder' %} aria-current="page"{% endif %}>Resume builder</a>
+    <a href="{% url 'ai_job_info' %}" class="{{ base }}{% if url_name == 'ai_job_info' %} {{ on }}{% endif %}"{% if url_name == 'ai_job_info' %} aria-current="page"{% endif %}>Job analysis</a>
+    <a href="{% url 'interview_prep' %}" class="{{ base }}{% if url_name == 'interview_prep' %} {{ on }}{% endif %}"{% if url_name == 'interview_prep' %} aria-current="page"{% endif %}>Coding practice</a>
+  {% endwith %}
+{% else %}
+  {% with base="nav-link whitespace-nowrap text-sm font-medium text-gray-600 transition-colors hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600" on="active text-blue-600" %}
+    <a href="{% url 'coach_dashboard' %}" class="{{ base }}{% if url_name == 'coach_dashboard' %} {{ on }}{% endif %}"{% if url_name == 'coach_dashboard' %} aria-current="page"{% endif %}>Interview coach</a>
+    <a href="{% url 'cv_import' %}" class="{{ base }}{% if url_name == 'cv_import' %} {{ on }}{% endif %}"{% if url_name == 'cv_import' %} aria-current="page"{% endif %}>Import CV</a>
+    <a href="{% url 'resume_builder' %}" class="{{ base }}{% if url_name == 'resume_builder' or url_name == 'resume_editor' %} {{ on }}{% endif %}"{% if url_name == 'resume_builder' %} aria-current="page"{% endif %}>Resume builder</a>
+    <a href="{% url 'ai_job_info' %}" class="{{ base }}{% if url_name == 'ai_job_info' %} {{ on }}{% endif %}"{% if url_name == 'ai_job_info' %} aria-current="page"{% endif %}>Job analysis</a>
+    <a href="{% url 'interview_prep' %}" class="{{ base }}{% if url_name == 'interview_prep' %} {{ on }}{% endif %}"{% if url_name == 'interview_prep' %} aria-current="page"{% endif %}>Coding practice</a>
+  {% endwith %}
+{% endif %}
+{% endwith %}

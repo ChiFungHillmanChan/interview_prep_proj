@@ -22,6 +22,17 @@
     @apply text-blue-600;
 }
 
-[x-cloak] { 
-    display: none !important; 
+[x-cloak] {
+    display: none !important;
+}
+
+/* Mobile menu: swap the hamburger for a close icon while the panel is open.
+   Built on <details> so primary navigation does not depend on JavaScript. */
+.nav-mobile > summary::-webkit-details-marker { display: none; }
+.nav-mobile[open] > summary .icon-open { display: none; }
+.nav-mobile[open] > summary .icon-close { display: block; }
+
+@media (prefers-reduced-motion: reduce) {
+    .nav-link::after { transition: none; }
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

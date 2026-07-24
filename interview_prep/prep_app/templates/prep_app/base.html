@@ -14,88 +14,48 @@
 
   <body class="min-h-screen flex flex-col">
     <!-- Navigation Bar -->
-    <nav class="fixed w-full bg-white shadow-sm z-50">
-      <div class="container mx-auto px-6 py-4">
-        <div class="flex items-center justify-between">
-          <a href="{% url 'home' %}" class="text-2xl font-bold text-blue-600">
+    <nav class="fixed inset-x-0 top-0 z-50 bg-white shadow-sm">
+      <div class="container mx-auto px-4 sm:px-6">
+        <div class="flex h-16 items-center justify-between gap-4">
+          <a
+            href="{% url 'home' %}"
+            class="shrink-0 rounded text-xl font-bold text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 sm:text-2xl"
+          >
             AceInterview
           </a>
-          <div class="hidden md:flex items-center space-x-8">
-            <a
-              href="{% url 'ai_job_info' %}"
-              class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if request.resolver_match.url_name == 'ai_job_info' %}text-blue-600 hover:text-blue-600{% endif %}"
-              >Job Analysis</a
-            >
-            <a
-              href="{% url 'cv_analysis' %}"
-              class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if request.resolver_match.url_name == 'cv_analysis' %}text-blue-600 hover:text-blue-600{% endif %}"
-              >Resume Analysis</a
-            >
-            <a
-              href="{% url 'coach_dashboard' %}"
-              class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if 'coach' in request.resolver_match.url_name %}text-blue-600 hover:text-blue-600{% endif %}"
-              >AI Interview Coach</a
-            >
-            <a
-              href="{% url 'ai_resume_upload' %}"
-              class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if 'ai_resume' in request.resolver_match.url_name %}text-blue-600 hover:text-blue-600{% endif %}"
-              >AI Resume Builder</a
-            >
-            
-            <a
-              href="{% url 'interview_prep' %}"
-              class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if request.resolver_match.url_name == 'interview_prep' %}text-blue-600 hover:text-blue-600{% endif %}"
-              >Coding Assessment</a
-            >
-            <a
-              href="{% url 'customer_support' %}"
-              class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if request.resolver_match.url_name == 'customer_support' %}text-blue-600 hover:text-blue-600{% endif %}"
-              >Customer Support</a
-            >
+
+          <!-- Desktop navigation. Below lg the five links cannot fit beside the
+               wordmark, so the panel below takes over rather than overflowing. -->
+          <div class="hidden items-center gap-6 lg:flex xl:gap-8">
+            {% include 'prep_app/_nav_links.html' with layout='desktop' %}
+
             {% if user.is_authenticated %}
-            <!-- User Dropdown -->
             <div
               class="relative"
               x-data="{ open: false }"
               @click.away="open = false"
+              @keydown.escape.window="open = false"
             >
               <button
                 @click="open = !open"
-                class="flex items-center space-x-2 text-gray-600 hover:text-blue-600 focus:outline-none"
+                type="button"
+                aria-haspopup="true"
+                :aria-expanded="open ? 'true' : 'false'"
+                class="flex items-center gap-1 rounded-full p-1 text-gray-600 transition-colors hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
-                <svg
-                  class="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
+                <span class="sr-only">Account menu</span>
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M19 9l-7 7-7-7"
-                  />
+                <svg class="h-4 w-4 transition-transform" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
 
-              <!-- Dropdown Menu -->
               <div
                 x-show="open"
                 x-cloak
-                class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50"
+                class="absolute right-0 z-50 mt-2 w-56 rounded-xl bg-white py-2 shadow-xl ring-1 ring-gray-200"
                 x-transition:enter="transition ease-out duration-100"
                 x-transition:enter-start="transform opacity-0 scale-95"
                 x-transition:enter-end="transform opacity-100 scale-100"
@@ -103,105 +63,71 @@
                 x-transition:leave-start="transform opacity-100 scale-100"
                 x-transition:leave-end="transform opacity-0 scale-95"
               >
-                <a
-                  href="{% url 'your_profile' %}"
-                  class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                >
-                  <svg
-                    class="w-4 h-4 inline-block mr-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                    />
-                  </svg>
-                  Profile Details
-                </a>
-
-                <a
-                  href="{% url 'privacy_center' %}"
-                  class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                >
-                  <svg
-                    class="w-4 h-4 inline-block mr-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                    />
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                  Privacy & data
-                </a>
-
-                <form action="{% url 'logout' %}" method="post" class="block">
+                <p class="truncate px-4 pb-2 text-xs text-gray-500">{{ user.email|default:user.username }}</p>
+                <a href="{% url 'your_profile' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:bg-blue-50">Profile details</a>
+                <a href="{% url 'privacy_center' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:bg-blue-50">Privacy &amp; data</a>
+                <a href="{% url 'customer_support' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:bg-blue-50">Customer support</a>
+                <form action="{% url 'logout' %}" method="post" class="mt-1 border-t border-gray-100 pt-1">
                   {% csrf_token %}
-                  <button
-                    type="submit"
-                    class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    <svg
-                      class="w-4 h-4 inline-block mr-2"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                      />
-                    </svg>
-                    Logout
+                  <button type="submit" class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 focus-visible:bg-red-50">
+                    Log out
                   </button>
                 </form>
               </div>
             </div>
             {% else %}
-            <a
-              href="{% url 'login' %}"
-              class="nav-link text-gray-600 hover:text-blue-600 transition-colors"
-            >
-              Login
+            <a href="{% url 'login' %}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+              Log in
             </a>
             {% endif %}
           </div>
 
-          <details class="relative md:hidden">
-            <summary class="cursor-pointer list-none rounded p-2 text-gray-600" aria-label="Open navigation menu">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+          <!-- Mobile / tablet navigation. Built on <details> so navigation keeps
+               working if Alpine fails to load; the panel is the same link list. -->
+          <details class="nav-mobile lg:hidden">
+            <summary
+              class="flex cursor-pointer list-none items-center justify-center rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              <span class="sr-only">Menu</span>
+              <svg class="icon-open h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <svg class="icon-close hidden h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </summary>
-            <div class="absolute right-0 mt-3 w-64 rounded-xl bg-white p-3 shadow-xl ring-1 ring-gray-200">
-              <a class="block rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50" href="{% url 'coach_dashboard' %}">Interview coach</a>
-              <a class="block rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50" href="{% url 'cv_import' %}">Import CV</a>
-              <a class="block rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50" href="{% url 'resume_builder' %}">Resume builder</a>
-              <a class="block rounded-lg px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50" href="{% url 'privacy_center' %}">Privacy & data</a>
-              {% if user.is_authenticated %}<form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="block w-full rounded-lg px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50" type="submit">Log out</button></form>{% else %}<a class="block rounded-lg px-4 py-3 text-sm font-medium text-blue-700" href="{% url 'login' %}">Log in</a>{% endif %}
+
+            <div class="absolute inset-x-0 top-full max-h-[calc(100vh_-_4rem)] overflow-y-auto border-t border-gray-100 bg-white px-4 pb-6 pt-3 shadow-xl">
+              <nav class="space-y-1" aria-label="Primary">
+                {% include 'prep_app/_nav_links.html' with layout='mobile' %}
+              </nav>
+
+              <div class="mt-4 space-y-1 border-t border-gray-100 pt-4">
+                {% if user.is_authenticated %}
+                <p class="truncate px-4 pb-1 text-xs text-gray-500">{{ user.email|default:user.username }}</p>
+                <a href="{% url 'your_profile' %}" class="block rounded-lg px-4 py-3 text-base font-medium text-gray-700 hover:bg-gray-50">Profile details</a>
+                <a href="{% url 'privacy_center' %}" class="block rounded-lg px-4 py-3 text-base font-medium text-gray-700 hover:bg-gray-50">Privacy &amp; data</a>
+                <a href="{% url 'customer_support' %}" class="block rounded-lg px-4 py-3 text-base font-medium text-gray-700 hover:bg-gray-50">Customer support</a>
+                <form method="post" action="{% url 'logout' %}">
+                  {% csrf_token %}
+                  <button type="submit" class="block w-full rounded-lg px-4 py-3 text-left text-base font-medium text-red-600 hover:bg-red-50">
+                    Log out
+                  </button>
+                </form>
+                {% else %}
+                <a href="{% url 'customer_support' %}" class="block rounded-lg px-4 py-3 text-base font-medium text-gray-700 hover:bg-gray-50">Customer support</a>
+                <a href="{% url 'login' %}" class="mt-2 block rounded-lg bg-blue-600 px-4 py-3 text-center text-base font-semibold text-white hover:bg-blue-700">Log in</a>
+                {% endif %}
+              </div>
             </div>
           </details>
         </div>
       </div>
     </nav>
 
-    <main class="flex-grow pt-20">
+    <main class="flex-grow pt-16">
       {% if messages %}
-        <div class="fixed right-5 top-24 z-50 w-full max-w-sm space-y-3 px-4">
+        <div class="fixed inset-x-0 top-20 z-50 mx-auto w-full max-w-sm space-y-3 px-4 sm:inset-x-auto sm:right-5 sm:mx-0">
           {% for message in messages %}
             <div class="rounded-lg border px-4 py-3 text-sm shadow-lg {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-blue-200 bg-white text-gray-700{% endif %}">
               {{ message }}
