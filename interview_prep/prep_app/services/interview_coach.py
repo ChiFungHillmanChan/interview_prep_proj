@@ -192,17 +192,21 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         return turn
 
     def complete_session(self, session: InterviewSession) -> InterviewSession:
+        # Fetched once and threaded through: the readiness, strongest/weakest
+        # and dimension-average helpers all read the same column of the same
+        # rows, and each used to issue its own query.
+        all_scores = list(session.turns.values_list('scores', flat=True))
         session.status = 'completed'
         session.completed_at = timezone.now()
-        session.readiness_label = self._calculate_readiness(session)
-        turn_count = session.turns.count()
+        session.readiness_label = self._calculate_readiness(session, all_scores)
+        turn_count = len(all_scores)
         if turn_count < 2:
             session.summary = (
                 "There is not enough interview evidence for a reliable level assessment yet. "
                 "Complete at least two detailed answers so the coach can identify a pattern."
             )
         else:
-            strongest, weakest = self._strongest_and_weakest_dimensions(session)
+            strongest, weakest = self._strongest_and_weakest_dimensions(session, all_scores)
             session.summary = (
                 f"Based on {turn_count} answers, your strongest demonstrated area is {strongest}. "
                 f"Your next practice priority is {weakest}. This assessment reflects only the "
@@ -214,7 +218,7 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
             session=session,
             defaults={
                 'readiness_label': session.readiness_label,
-                'dimension_scores': self._dimension_averages(session),
+                'dimension_scores': self._dimension_averages(session, all_scores),
                 'target_role_gaps': self._target_role_gaps(session),
                 'evidence_answer_count': turn_count,
             },
@@ -424,8 +428,9 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
                 'assessment_confidence', 'updated_at'
             ])
 
-    def _calculate_readiness(self, session) -> str:
-        turns = list(session.turns.values_list('scores', flat=True))
+    def _calculate_readiness(self, session, all_scores: Optional[list] = None) -> str:
+        turns = session.turns.values_list('scores', flat=True) if all_scores is None else all_scores
+        turns = list(turns)
         if len(turns) < 2:
             return 'insufficient_evidence'
         values = [
@@ -443,9 +448,9 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
             return 'mostly_ready'
         return 'building'
 
-    def _strongest_and_weakest_dimensions(self, session):
+    def _strongest_and_weakest_dimensions(self, session, all_scores: Optional[list] = None):
         buckets = {key: [] for key in self.SCORE_KEYS}
-        for scores in session.turns.values_list('scores', flat=True):
+        for scores in (session.turns.values_list('scores', flat=True) if all_scores is None else all_scores):
             for key, value in scores.items():
                 if key in buckets and isinstance(value, (int, float)):
                     buckets[key].append(value)
@@ -468,9 +473,9 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         next_index = min(current_index + 1, len(plan) - 1)
         return plan[next_index]['key'], next_index
 
-    def _dimension_averages(self, session: InterviewSession) -> Dict[str, float | None]:
+    def _dimension_averages(self, session: InterviewSession, all_scores: Optional[list] = None) -> Dict[str, float | None]:
         buckets = {key: [] for key in self.SCORE_KEYS}
-        for scores in session.turns.values_list('scores', flat=True):
+        for scores in (session.turns.values_list('scores', flat=True) if all_scores is None else all_scores):
             for key in self.SCORE_KEYS:
                 value = scores.get(key) if isinstance(scores, dict) else None
                 if isinstance(value, (int, float)):

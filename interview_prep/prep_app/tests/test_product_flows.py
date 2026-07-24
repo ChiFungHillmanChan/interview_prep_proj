@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.test import TestCase, override_settings
 from django.core import mail
 from django.urls import reverse
@@ -15,6 +17,7 @@ from prep_app.models import (
     CareerMemoryFact,
     CareerProfile,
     InterviewSession,
+    InterviewTurn,
     ReadinessSnapshot,
     ResumeVersion,
     SkillEvidence,
@@ -405,6 +408,30 @@ class StagedInterviewAndPrivacyTests(TestCase):
         self.assertTrue(User.objects.filter(id=self.user.id).exists())
         self.client.post(reverse('account_delete'), {'password': 'test-pass-123'})
         self.assertFalse(User.objects.filter(id=self.user.id).exists())
+
+    def test_data_export_query_count_does_not_grow_with_interview_history(self):
+        """The export used to re-fetch each session by pk to reach its turns.
+
+        That is 1 + 2N queries, unbounded in a user's own history, on a page
+        that already has to serialise everything they own.
+        """
+        def export_queries(session_count):
+            InterviewSession.objects.filter(user=self.user).delete()
+            for index in range(session_count):
+                session = InterviewSession.objects.create(
+                    user=self.user, target_role=f'Role {index}', current_question='q',
+                )
+                InterviewTurn.objects.create(
+                    session=session, question='q', answer='a', feedback='f', scores={'depth': 3},
+                )
+            with CaptureQueriesContext(connection) as captured:
+                response = self.client.get(reverse('data_export'))
+            self.assertEqual(response.status_code, 200)
+            return len(captured)
+
+        few = export_queries(3)
+        many = export_queries(12)
+        self.assertEqual(few, many, f'query count scales with history: {few} -> {many}')
 
     def test_job_analysis_survives_an_unusable_model_response(self):
         """A model reply that is not clean JSON must not 500 the page.

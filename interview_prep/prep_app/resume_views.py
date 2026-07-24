@@ -43,7 +43,9 @@ def resume_builder(request):
         return redirect('resume_editor', version_id=version.id)
     return render(request, 'prep_app/resume_builder.html', {
         'form': form,
-        'versions': request.user.resume_versions.all(),
+        # Bounded like every other listing in the app; nothing caps how many
+        # versions a user can create, so this page was unbounded.
+        'versions': request.user.resume_versions.all()[:20],
         'confirmed_count': request.user.career_memory.filter(
             user_confirmed=True, review_status='confirmed'
         ).count(),

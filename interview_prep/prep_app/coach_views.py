@@ -23,7 +23,7 @@ from .services.career_memory import memory_fingerprint
 def coach_dashboard(request):
     profile, _ = CareerProfile.objects.get_or_create(user=request.user)
     skills = request.user.skill_evidence.all()
-    memory = request.user.career_memory.select_related('source_session')[:12]
+    memory = request.user.career_memory.all()[:12]
     sessions = request.user.interview_sessions.prefetch_related('turns')[:8]
     snapshots = list(request.user.readiness_history.all())
     dimension_trends = {}
