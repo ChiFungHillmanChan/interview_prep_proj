@@ -21,7 +21,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 import json
-from .forms import JobInfoForm, UserProfileForm, CVAnalysisForm, CustomAuthenticationForm, CustomUserCreationForm, CodeSubmissionForm
+from .forms import JobInfoForm, CVAnalysisForm, CustomAuthenticationForm, CustomUserCreationForm, CodeSubmissionForm
 from .models import Topic, Question, UserSubmission, UserCode
 from django.contrib.auth.forms import PasswordChangeForm
 
@@ -277,20 +277,6 @@ def ai_job_info(request):
     else:
         form = JobInfoForm()
     return render(request, 'prep_app/job_info.html', {'form': form})
-
-
-def user_profile(request):
-    if request.method == 'POST':
-        form = UserProfileForm(request.POST, request.FILES)
-        if form.is_valid():
-            # Process the form data
-            # You can save it to the database or pass it to the next step
-            # For now, we'll just redirect to the job description page
-            return redirect('job_description')
-    else:
-        form = UserProfileForm()
-    
-    return render(request, 'user_profile.html', {'form': form})
 
 
 def parse_ai_response(response_text):
@@ -628,6 +614,7 @@ def serialize_object(obj):
 
 ## AI resume loading endpoints removed
 
+@login_required
 @require_http_methods(["POST"])
 def file_upload(request):
     """Minimal upload endpoint used by CV Analysis front-end.

@@ -406,6 +406,15 @@ class StagedInterviewAndPrivacyTests(TestCase):
         self.client.post(reverse('account_delete'), {'password': 'test-pass-123'})
         self.assertFalse(User.objects.filter(id=self.user.id).exists())
 
+    def test_the_upload_endpoint_requires_a_signed_in_user(self):
+        payload = SimpleUploadedFile('anything.bin', b'A' * 1024, content_type='application/octet-stream')
+        self.client.logout()
+
+        response = self.client.post(reverse('file_upload'), {'f': payload})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('login'), response.url)
+
     def test_pages_send_a_csp_and_load_no_third_party_assets(self):
         """Front-end assets are committed, so nothing is fetched off-origin.
 

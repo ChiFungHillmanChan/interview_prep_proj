@@ -21,7 +21,6 @@ urlpatterns = [
     path('social-auth/', include('social_django.urls', namespace='social')),
 
     path('ai_job_info/', views.ai_job_info, name='ai_job_info'),
-    path('user-profile/', views.user_profile, name='user_profile'),
 
     path('cv-analysis/', career_views.cv_import, name='cv_analysis'),
     # Removed deprecated cv-analysis-process endpoint
