@@ -9,9 +9,10 @@ security constraints, testing standard, definition of done). This file covers co
 architecture that only becomes visible after reading several files at once. Where the two overlap,
 `AGENTS.md` wins.
 
-`README.md` (root) documents the product, deployment, and env vars. `interview_prep/README.md` and
-`TODO.md` are stale 2024 artifacts describing a product that no longer exists — do not treat them as
-current.
+`README.md` (root) documents the product, deployment, and env vars. `interview_prep/README.md` is a
+stale 2024 artifact describing a product that no longer exists — do not treat it as current. The
+same is true of everything in `TODO.md` **below** the "Deferred" section at the top; that top
+section is current and records work that is parked on purpose.
 
 ## Commands
 
