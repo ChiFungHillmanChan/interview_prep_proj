@@ -294,3 +294,53 @@ class StagedInterviewAndPrivacyTests(TestCase):
         self.assertRedirects(response, reverse('password_reset_done'))
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('/password-reset/confirm/', mail.outbox[0].body)
+
+
+class InAppPasswordChangeTests(TestCase):
+    """The signed-in password change is the supported path; it must not need email."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='candidate', password='old-password-123', email='candidate@example.com'
+        )
+        self.client.force_login(self.user)
+
+    def test_profile_page_renders_a_submittable_password_form(self):
+        response = self.client.get(reverse('your_profile'))
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        # The fields were once rendered outside any <form>, so the button posted nothing.
+        self.assertIn('<form method="post"', body)
+        self.assertIn('csrfmiddlewaretoken', body)
+        for field in ('old_password', 'new_password1', 'new_password2'):
+            self.assertIn(field, body)
+
+    def test_valid_change_updates_the_password_and_keeps_the_user_signed_in(self):
+        response = self.client.post(reverse('your_profile'), {
+            'old_password': 'old-password-123',
+            'new_password1': 'fresh-password-456',
+            'new_password2': 'fresh-password-456',
+        })
+        self.assertRedirects(response, reverse('your_profile'))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('fresh-password-456'))
+        self.assertEqual(len(mail.outbox), 0)
+        # update_session_auth_hash must run, or changing the password signs you out.
+        self.assertEqual(self.client.get(reverse('your_profile')).status_code, 200)
+
+    def test_wrong_current_password_is_rejected_and_shown(self):
+        response = self.client.post(reverse('your_profile'), {
+            'old_password': 'not-the-current-password',
+            'new_password1': 'fresh-password-456',
+            'new_password2': 'fresh-password-456',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'password was entered incorrectly')
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('old-password-123'))
+
+    def test_change_requires_authentication(self):
+        self.client.logout()
+        response = self.client.get(reverse('your_profile'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response['Location'])

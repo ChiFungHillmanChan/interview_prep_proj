@@ -1,6 +1,33 @@
 # Django Resume Maker - Features Checklist
 
 ---
+## Deferred: outbound email (paused 2026-07-24)
+
+Password reset by email does not work in production and is **parked on purpose**.
+The supported way to change a password is the signed-in form at `/your-profile/`,
+which needs no email at all.
+
+What is already done:
+
+- `EMAIL_HOST=smtp.resend.com`, `EMAIL_PORT=587`, `EMAIL_USE_TLS=True` and
+  `HOST_EMAIL=resend` are set in all Vercel environments.
+- Django's stock SMTP backend is already correct for Resend; no code change is needed.
+
+What remains, when it is worth doing:
+
+1. Create a free Resend account (3,000 emails/month, 100/day — far more than
+   resets need). The Vercel Marketplace listing is **not** the path: it has no
+   free tier, only Pro at $20/month.
+2. Add and verify `hillmanchan.com` in Resend, then set
+   `DEFAULT_FROM_EMAIL='AceInterview <noreply@hillmanchan.com>'`.
+3. Set `HOST_PASSWORD` to the Resend API key and redeploy.
+4. Send a real reset against production and confirm delivery — a 302 from
+   `/password-reset/` only means the view returned, not that mail left.
+
+Until step 3, the "Forgot password?" link on the login page leads nowhere useful.
+Consider hiding it rather than letting it silently fail for real users.
+
+---
 ## Pages
 - [X] Home page
 - [X] Login 
