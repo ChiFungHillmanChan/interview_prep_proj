@@ -36,3 +36,10 @@ output/
 
 # ---- Vercel ----
 .vercel/
+
+# ---- Agent skills installed by the Neon integration ----
+# Local tooling for AI assistants; the app does not read them at runtime.
+# `.claude/skills/*` are symlinks into `.agents/skills/`.
+interview_prep/.agents/
+interview_prep/.claude/skills/
+interview_prep/skills-lock.json
