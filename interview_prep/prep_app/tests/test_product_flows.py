@@ -208,6 +208,81 @@ class TruthfulResumeFlowTests(TestCase):
         self.client.login(username='resume-other', password='test-pass-123')
         self.assertEqual(self.client.get(reverse('resume_editor', args=[version.id])).status_code, 404)
 
+    def test_a_rejected_save_leaves_every_career_memory_fact_untouched(self):
+        """A save that fails validation must not half-rewrite the evidence.
+
+        Editing an entry rewrites its CareerMemoryFact in place (including
+        source_type -> 'manual'). Without one transaction around the whole
+        request, entries validated before the failure stayed rewritten while the
+        user was told the save failed.
+        """
+        version = self._create_version()
+        collide = confirmed_fact(self.user, 'project', 'Taken project title', 'Taken project title')
+        document = version.document
+        # Sections are processed in RESUME_SECTIONS order, so the skill edit is
+        # committed before the later project entry collides with `collide`. The
+        # fingerprint covers category, title and content, so both must match.
+        document['skills'][0]['content'] = 'Python 3'
+        document['projects'][0]['title'] = 'Taken project title'
+        document['projects'][0]['content'] = 'Taken project title'
+
+        response = self.client.post(
+            reverse('resume_save', args=[version.id]),
+            data=json.dumps(document),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()['ok'])
+        self.python.refresh_from_db()
+        self.project.refresh_from_db()
+        version.refresh_from_db()
+        # The skill was edited earlier in the same rejected request; it must be
+        # rolled back, not left rewritten under a "save failed" message.
+        self.assertEqual(self.python.content, 'Python')
+        self.assertEqual(self.project.content, 'Built a Django interview coach')
+        self.assertEqual(version.document['skills'][0]['content'], 'Python')
+        self.assertEqual(collide.content, 'Taken project title')
+
+    def test_non_numeric_coverage_percent_is_rejected_without_touching_evidence(self):
+        version = self._create_version()
+        document = version.document
+        document['projects'][0]['content'] = 'Rewritten by a malformed payload'
+        document['job_match']['coverage_percent'] = [1, 2]
+
+        response = self.client.post(
+            reverse('resume_save', args=[version.id]),
+            data=json.dumps(document),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.content, 'Built a Django interview coach')
+
+    def test_save_rejects_entries_that_are_not_the_users_confirmed_evidence(self):
+        version = self._create_version()
+        foreign = confirmed_fact(self.other, 'skill', 'Another candidate secret')
+        pending = CareerMemoryFact.objects.get(user=self.user, content='Kubernetes')
+        template = version.document
+
+        for label, memory_id in [('another user', foreign.id), ('own unconfirmed', pending.id)]:
+            with self.subTest(memory_id=label):
+                document = json.loads(json.dumps(template))
+                document['skills'] = [{'memory_id': memory_id, 'title': '', 'content': 'Injected'}]
+                response = self.client.post(
+                    reverse('resume_save', args=[version.id]),
+                    data=json.dumps(document),
+                    content_type='application/json',
+                )
+                self.assertEqual(response.status_code, 400)
+                version.refresh_from_db()
+                self.assertEqual(version.document['skills'][0]['content'], 'Python')
+
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.user, self.other)
+        self.assertEqual(foreign.content, 'Another candidate secret')
+
     def test_deleting_a_skill_prevents_its_confirmed_memory_from_being_reused(self):
         skill = SkillEvidence.objects.create(user=self.user, name='Python', evidence='Built a coach')
         self.client.post(reverse('coach_skill_delete', args=[skill.id]))
