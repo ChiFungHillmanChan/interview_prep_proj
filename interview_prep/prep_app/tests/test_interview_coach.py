@@ -231,6 +231,86 @@ class InterviewCoachFlowTests(TestCase):
         self.assertEqual(skills.count(), 1)
         self.assertEqual(skills.get().self_level, 'advanced')
 
+    def test_model_cannot_store_memory_whose_evidence_the_answer_never_said(self):
+        """Grounding gate: evidence must overlap the candidate's real answer.
+
+        Without this the model can attribute an invented quote to the
+        candidate and have it persisted as their Career Memory. Deleting the
+        threshold check used to leave the whole suite green.
+        """
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Describe a project.',
+        )
+        assessment = {
+            'feedback': 'Thanks for the detail.',
+            'scores': {key: 3 for key in InterviewCoachService.SCORE_KEYS},
+            'assessment_confidence': 'low',
+            'demonstrated_skills': [],
+            'memory_updates': [{
+                'category': 'experience',
+                'content': 'Led a migration of the billing platform to Kubernetes.',
+                # Nothing here appears in the answer below.
+                'evidence': 'Led a migration of the billing platform to Kubernetes.',
+                'confidence': 'high',
+            }],
+            'next_focus': 'evidence',
+            'next_question': 'What did you personally do?',
+        }
+
+        with patch.object(InterviewCoachService, 'evaluate_answer', return_value=assessment):
+            self.client.post(reverse('coach_answer', args=[session.id]), {
+                'answer': 'I wrote documentation for the onboarding guide and ran a workshop.',
+            })
+
+        self.assertFalse(
+            CareerMemoryFact.objects.filter(user=self.user, source_type='interview').exists(),
+            'ungrounded evidence was persisted as Career Memory',
+        )
+
+    def test_high_overlap_evidence_is_still_stored(self):
+        """The other side of the gate, so it cannot be "fixed" by rejecting everything."""
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Describe a project.',
+        )
+        answer = 'I used Django authentication and protected each private view with login checks.'
+        assessment = {
+            'feedback': 'Good.',
+            'scores': {key: 3 for key in InterviewCoachService.SCORE_KEYS},
+            'assessment_confidence': 'low',
+            'demonstrated_skills': [],
+            'memory_updates': [{
+                'category': 'experience',
+                'content': 'Implemented Django authentication.',
+                'evidence': 'Used Django authentication and protected the private views.',
+                'confidence': 'high',
+            }],
+            'next_focus': 'evidence',
+            'next_question': 'And then?',
+        }
+
+        with patch.object(InterviewCoachService, 'evaluate_answer', return_value=assessment):
+            self.client.post(reverse('coach_answer', args=[session.id]), {'answer': answer})
+
+        self.assertTrue(
+            CareerMemoryFact.objects.filter(user=self.user, source_type='interview').exists(),
+        )
+
+    def test_the_deterministic_opening_question_is_usable_without_ai(self):
+        """This runs for every session started with AI off, but was always mocked."""
+        profile = self.user.career_profile
+        service = InterviewCoachService(use_ai=False)
+
+        with_focus = service.generate_initial_question(
+            self.user, profile, 'Backend Engineer', '', ['system design'], 'english',
+        )
+        without_anything = service.generate_initial_question(
+            self.user, profile, 'Backend Engineer', '', [], 'english',
+        )
+
+        self.assertIn('system design', with_focus)
+        self.assertIn('Backend Engineer', without_anything)
+        self.assertTrue(without_anything.strip().endswith('?'))
+
     def test_candidate_cannot_open_another_users_interview(self):
         other_session = InterviewSession.objects.create(
             user=self.other_user,

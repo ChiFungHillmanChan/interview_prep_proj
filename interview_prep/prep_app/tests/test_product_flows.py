@@ -24,20 +24,28 @@ from prep_app.models import (
     SkillEvidence,
 )
 from prep_app.services.career_memory import CVImportService, memory_fingerprint
+from prep_app.services.document_parser import DocumentParser
 from prep_app.services.interview_coach import InterviewCoachService
 
 
-def docx_upload(text_lines, name='candidate.docx'):
+DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+
+def docx_bytes(text_lines):
     document = Document()
     for line in text_lines:
         document.add_paragraph(line)
     output = io.BytesIO()
     document.save(output)
-    return SimpleUploadedFile(
-        name,
-        output.getvalue(),
-        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    )
+    return output.getvalue()
+
+
+def upload_from_bytes(payload, name='candidate.docx', content_type=DOCX_MIME):
+    return SimpleUploadedFile(name, payload, content_type=content_type)
+
+
+def docx_upload(text_lines, name='candidate.docx'):
+    return upload_from_bytes(docx_bytes(text_lines), name)
 
 
 def zip_bomb_docx(declared_mb=40, name='bomb.docx'):
@@ -130,13 +138,17 @@ class CVImportFlowTests(TestCase):
             self.assertTrue(memory.evidence)
 
     def test_duplicate_cv_does_not_duplicate_document_or_memory(self):
-        upload = docx_upload(['Skills', 'Python'])
+        # Deduplication keys on sha256 of the raw bytes, and two independent
+        # python-docx saves are not byte-identical — zip entry timestamps have
+        # 2-second granularity, so a save straddling that boundary changes the
+        # digest. Reuse one payload so this asserts dedup, not clock luck.
+        payload = docx_bytes(['Skills', 'Python'])
         with patch.object(CVImportService, '_request_json', return_value={'items': [{
             'category': 'skill', 'title': 'Python', 'content': 'Python', 'details': {},
             'evidence_excerpt': 'Python', 'confidence': 'high',
         }]}):
-            self.client.post(reverse('cv_import'), {'cv_file': upload})
-            self.client.post(reverse('cv_import'), {'cv_file': docx_upload(['Skills', 'Python'])})
+            self.client.post(reverse('cv_import'), {'cv_file': upload_from_bytes(payload)})
+            self.client.post(reverse('cv_import'), {'cv_file': upload_from_bytes(payload)})
         self.assertEqual(CandidateDocument.objects.count(), 1)
         self.assertEqual(CareerMemoryFact.objects.count(), 1)
 
@@ -156,6 +168,76 @@ class CVImportFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'valid PDF signature')
         self.assertFalse(CandidateDocument.objects.exists())
+
+    def test_cv_import_drops_categories_outside_the_import_allowlist(self):
+        """Grounding gate: CV extraction may only produce CV-shaped categories.
+
+        experience/strength/growth/preference/goal come from interview answers
+        and are gated by the evidence-overlap check instead. Deleting the
+        allowlist here used to leave the whole suite green.
+        """
+        lines = ['Skills', 'Python', 'Leadership of the platform team']
+        items = [
+            {'category': 'skill', 'title': 'Python', 'content': 'Python', 'details': {},
+             'evidence_excerpt': 'Python', 'confidence': 'high'},
+            # Real excerpt, but a category CV import must never emit.
+            {'category': 'experience', 'title': 'Leadership', 'details': {},
+             'content': 'Leadership of the platform team',
+             'evidence_excerpt': 'Leadership of the platform team', 'confidence': 'high'},
+        ]
+
+        with patch.object(CVImportService, '_request_json', return_value={'items': items}):
+            self.client.post(reverse('cv_import'), {'cv_file': docx_upload(lines)})
+
+        self.assertTrue(CareerMemoryFact.objects.filter(user=self.user, content='Python').exists())
+        self.assertFalse(
+            CareerMemoryFact.objects.filter(user=self.user, category='experience').exists(),
+            'an out-of-allowlist category reached Career Memory',
+        )
+
+    def test_upload_validation_rejects_each_layer_independently(self):
+        """The chain is size -> extension -> MIME -> magic bytes -> parser.
+
+        Only the magic-byte layer had a test; the name of the original one
+        claimed more coverage than it had.
+        """
+        cases = [
+            ('wrong extension', upload_from_bytes(b'anything', 'resume.exe', DOCX_MIME)),
+            ('disallowed MIME', upload_from_bytes(docx_bytes(['Skills']), 'resume.docx', 'text/plain')),
+            ('bad DOCX signature', upload_from_bytes(b'not a zip at all', 'resume.docx', DOCX_MIME)),
+            ('bad PDF signature', upload_from_bytes(b'not a pdf', 'resume.pdf', 'application/pdf')),
+        ]
+        for label, payload in cases:
+            with self.subTest(layer=label):
+                response = self.client.post(reverse('cv_import'), {'cv_file': payload})
+                self.assertEqual(response.status_code, 200)
+                self.assertFalse(CandidateDocument.objects.exists(), f'{label} was accepted')
+
+    def test_oversized_upload_is_rejected_before_parsing(self):
+        oversized = upload_from_bytes(b'%PDF' + b'0' * (11 * 1024 * 1024), 'big.pdf', 'application/pdf')
+        self.assertGreater(oversized.size, DocumentParser.MAX_FILE_SIZE)
+
+        response = self.client.post(reverse('cv_import'), {'cv_file': oversized})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CandidateDocument.objects.exists())
+
+    def test_import_still_works_when_the_model_call_raises(self):
+        """The documented guarantee is that an outage degrades, never breaks.
+
+        Every existing AI-failure test exercised the "AI disabled" short
+        circuit, which returns before the try block — the except branch that
+        actually catches an outage was never run.
+        """
+        with override_settings(CAREER_MEMORY_USE_AI=True, GEMINI_API_KEY='test-key'):
+            with patch('prep_app.services.career_memory.genai') as fake_genai:
+                fake_genai.Client.side_effect = RuntimeError('gemini is down')
+                response = self.client.post(reverse('cv_import'), {
+                    'cv_file': docx_upload(['Skills', 'Python, SQL']),
+                })
+
+        self.assertRedirects(response, reverse('coach_dashboard'))
+        self.assertTrue(CareerMemoryFact.objects.filter(user=self.user, content='Python').exists())
 
     def test_upload_rejects_a_decompression_bomb_that_passes_the_size_check(self):
         """A DOCX is a zip, so the 10MB cap bounds only the compressed bytes.
@@ -345,6 +427,144 @@ class TruthfulResumeFlowTests(TestCase):
             'title': 'After deletion', 'target_role': 'Backend Engineer', 'job_description': 'Python required',
         })
         self.assertEqual(ResumeVersion.objects.get().document['skills'], [])
+
+
+@override_settings(INTERVIEW_COACH_USE_AI=False)
+class OwnerScopedManagementTests(TestCase):
+    """The delete and update views that had no coverage at all.
+
+    Both deletes are ownership-scoped today; nothing regression-tested that,
+    so dropping a `user=request.user` filter would have gone unnoticed.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='owner', password='test-pass-123')
+        self.other = User.objects.create_user(username='intruder', password='test-pass-123')
+        CareerProfile.objects.create(user=self.user, target_role='Backend Engineer')
+        self.client.login(username='owner', password='test-pass-123')
+
+    def _other_users_document(self):
+        return CandidateDocument.objects.create(
+            user=self.other, original_name='their-cv.pdf', file_type='PDF',
+            mime_type='application/pdf', size_bytes=1, content_sha256='a' * 64,
+            extracted_text='Private CV text', status='ready',
+        )
+
+    def _other_users_resume(self):
+        return ResumeVersion.objects.create(
+            user=self.other, title='Their resume',
+            document={'schema_version': 1, 'personal': {}, 'skills': []},
+        )
+
+    def test_resume_delete_is_owner_scoped(self):
+        theirs = self._other_users_resume()
+        mine = ResumeVersion.objects.create(
+            user=self.user, title='Mine', document={'schema_version': 1, 'personal': {}, 'skills': []},
+        )
+
+        self.assertEqual(self.client.post(reverse('resume_delete', args=[theirs.id])).status_code, 404)
+        self.assertTrue(ResumeVersion.objects.filter(id=theirs.id).exists())
+
+        self.client.post(reverse('resume_delete', args=[mine.id]))
+        self.assertFalse(ResumeVersion.objects.filter(id=mine.id).exists())
+
+    def test_candidate_document_delete_is_owner_scoped_and_can_keep_memory(self):
+        theirs = self._other_users_document()
+        self.assertEqual(
+            self.client.post(reverse('candidate_document_delete', args=[theirs.id])).status_code, 404,
+        )
+        self.assertTrue(CandidateDocument.objects.filter(id=theirs.id).exists())
+
+        mine = CandidateDocument.objects.create(
+            user=self.user, original_name='cv.pdf', file_type='PDF', mime_type='application/pdf',
+            size_bytes=1, content_sha256='b' * 64, extracted_text='My CV', status='ready',
+        )
+        fact = CareerMemoryFact.objects.create(
+            user=self.user, category='skill', content='Python', evidence='Python',
+            source_type='cv', source_document=mine,
+            fingerprint=memory_fingerprint('skill', '', 'Python'),
+        )
+
+        self.client.post(reverse('candidate_document_delete', args=[mine.id]))
+
+        self.assertFalse(CandidateDocument.objects.filter(id=mine.id).exists())
+        # Memory is kept unless the user asked for it to go.
+        self.assertTrue(CareerMemoryFact.objects.filter(id=fact.id).exists())
+
+    def test_candidate_document_delete_can_remove_generated_memory(self):
+        document = CandidateDocument.objects.create(
+            user=self.user, original_name='cv.pdf', file_type='PDF', mime_type='application/pdf',
+            size_bytes=1, content_sha256='c' * 64, extracted_text='My CV', status='ready',
+        )
+        CareerMemoryFact.objects.create(
+            user=self.user, category='skill', content='Rust', evidence='Rust',
+            source_type='cv', source_document=document,
+            fingerprint=memory_fingerprint('skill', '', 'Rust'),
+        )
+
+        self.client.post(reverse('candidate_document_delete', args=[document.id]), {'delete_memories': 'on'})
+
+        self.assertFalse(CareerMemoryFact.objects.filter(user=self.user, content='Rust').exists())
+
+    def test_adding_a_skill_creates_confirmed_memory_and_updates_the_profile(self):
+        response = self.client.post(reverse('coach_skill_add'), {
+            'name': 'Django', 'self_level': 'intermediate', 'evidence': 'Built a coach app',
+        })
+        self.assertRedirects(response, reverse('coach_dashboard'))
+
+        skill = SkillEvidence.objects.get(user=self.user, name='Django')
+        self.assertEqual(skill.self_level, 'intermediate')
+        fact = CareerMemoryFact.objects.get(user=self.user, category='skill', content='Django')
+        # Manual entry is the user's own claim, so it is confirmed on the spot.
+        self.assertTrue(fact.user_confirmed)
+        self.assertEqual(fact.source_type, 'manual')
+
+        response = self.client.post(reverse('coach_profile_update'), {
+            'target_role': 'Staff Engineer', 'goals': 'Lead a platform team',
+            'preferred_language': 'english', 'interview_style': 'challenging',
+            'desired_difficulty': 'senior',
+        })
+        self.assertRedirects(response, reverse('coach_dashboard'))
+        self.user.career_profile.refresh_from_db()
+        self.assertEqual(self.user.career_profile.target_role, 'Staff Engineer')
+
+    def test_privacy_centre_shows_only_the_signed_in_users_uploads(self):
+        self._other_users_document()
+        CandidateDocument.objects.create(
+            user=self.user, original_name='my-own-cv.pdf', file_type='PDF',
+            mime_type='application/pdf', size_bytes=1, content_sha256='d' * 64,
+            extracted_text='Mine', status='ready',
+        )
+
+        response = self.client.get(reverse('privacy_center'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'my-own-cv.pdf')
+        self.assertNotContains(response, 'their-cv.pdf')
+
+    def test_invalid_submissions_are_rejected_without_creating_anything(self):
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Tell me about a project.',
+        )
+
+        # Answer below the minimum length.
+        self.client.post(reverse('coach_answer', args=[session.id]), {'answer': 'too short'})
+        self.assertFalse(InterviewTurn.objects.filter(session=session).exists())
+
+        # Interview start with no target role.
+        self.client.post(reverse('coach_start'), {'target_role': '', 'job_description': ''})
+        self.assertEqual(InterviewSession.objects.filter(user=self.user).count(), 1)
+
+        # Career Memory edit stripped of its evidence excerpt.
+        fact = CareerMemoryFact.objects.create(
+            user=self.user, category='project', title='A', content='Built a service',
+            evidence='Built a service', fingerprint=memory_fingerprint('project', 'A', 'Built a service'),
+        )
+        self.client.post(reverse('coach_memory_edit', args=[fact.id]), {
+            'title': 'A', 'content': 'Rewritten', 'evidence': '',
+        })
+        fact.refresh_from_db()
+        self.assertEqual(fact.content, 'Built a service')
 
 
 @override_settings(INTERVIEW_COACH_USE_AI=False)
