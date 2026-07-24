@@ -1,5 +1,4 @@
 import re
-import ast 
 try:
     from google import genai
 except ImportError:
@@ -23,6 +22,7 @@ from django.views.decorators.http import require_http_methods
 import json
 from .forms import JobInfoForm, CVAnalysisForm, CustomAuthenticationForm, CustomUserCreationForm, CodeSubmissionForm
 from .models import Topic, Question, UserSubmission, UserCode
+from .services.ai_client import request_timeout_ms
 from django.contrib.auth.forms import PasswordChangeForm
 
 
@@ -134,12 +134,26 @@ def your_profile(request):
     })
 
 def analyze_job_description(job_role, company_name, job_description):
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    
+    """Summarise a job description, or fall back to a deterministic outline.
+
+    Mirrors the boundary the coach services use: ask for JSON, normalize every
+    field, and never let a model failure reach the user as an exception.
+    """
+    result = _request_job_analysis(job_role, company_name, job_description)
+    if result is None:
+        return _fallback_job_analysis(job_role, company_name, job_description)
+    return result
+
+
+def _request_job_analysis(job_role, company_name, job_description):
+    api_key = getattr(settings, 'GEMINI_API_KEY', '')
+    if not api_key:
+        return None
+
     prompt = f"""
     Analyze the following job description for {job_role} at {company_name}:
 
-    {job_description}
+    {job_description[:6000]}
 
     Provide the following information:
     1. Simplified job description (2-3 sentences)
@@ -147,23 +161,54 @@ def analyze_job_description(job_role, company_name, job_description):
     3. Key benefits (return as a list)
     4. Future interview process steps (list of 3-5 likely steps)
 
-    Format the output as a Python dictionary with keys: 'simplified_description', 'skills', 'benefits', and 'interview_steps'.
+    Return JSON only, with keys 'simplified_description', 'skills', 'benefits'
+    and 'interview_steps'.
     """
-    
-    response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
-        contents=prompt,
-        config={"temperature": 0}
-    )
-    clean_response = response.text.replace("```python", "").replace("```", "").strip()
 
-    print (clean_response)
-    analysis = ast.literal_eval(clean_response.strip())
+    try:
+        client = genai.Client(api_key=api_key, http_options={'timeout': request_timeout_ms()})
+        response = client.models.generate_content(
+            model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-2.5-flash-lite'),
+            contents=prompt,
+            config={"temperature": 0, "response_mime_type": "application/json"},
+        )
+        parsed = json.loads(response.text.strip().replace('```json', '').replace('```', '').strip())
+    except Exception:
+        # Any model, network or parse failure degrades to the outline below.
+        return None
+    if not isinstance(parsed, dict):
+        return None
 
-    # analysis['skills'] = [skill.strip() for skill in analysis['skills'].split(",")]
-    # analysis['benefits'] = [benefit.strip() for benefit in analysis['benefits'].split(".") if benefit]
+    def _list(value):
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip()[:200] for item in value if str(item).strip()][:12]
 
-    return analysis
+    return {
+        'simplified_description': str(parsed.get('simplified_description', '')).strip()[:2000],
+        'skills': _list(parsed.get('skills')),
+        'benefits': _list(parsed.get('benefits')),
+        'interview_steps': _list(parsed.get('interview_steps')),
+    }
+
+
+def _fallback_job_analysis(job_role, company_name, job_description):
+    """Honest, deterministic outline used when the model is unavailable."""
+    quick = _quick_cv_vs_jd(job_description, '')
+    return {
+        'simplified_description': (
+            f'Automatic summarising is unavailable right now, so this is taken directly from the '
+            f'posting for {job_role} at {company_name}. Read the full description below for detail.'
+        ),
+        'skills': quick['job_skills'][:12],
+        'benefits': [],
+        'interview_steps': [
+            'Application review',
+            'Introductory call with a recruiter',
+            'Technical or role-specific interview',
+            'Final interview with the hiring manager',
+        ],
+    }
 def _quick_cv_vs_jd(job_description: str, cv_content: str) -> dict:
     # Deterministic, fast heuristic analysis for immediate UI feedback
     import re

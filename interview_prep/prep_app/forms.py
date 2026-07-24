@@ -196,7 +196,8 @@ class AIResumeUploadForm(forms.Form):
 class JobInfoForm(forms.Form):
     job_role = forms.CharField(max_length=100)
     company_name = forms.CharField(max_length=100)
-    job_description = forms.CharField(widget=forms.Textarea)
+    # Bounded so an oversized paste cannot be sent to the model verbatim.
+    job_description = forms.CharField(max_length=20000, widget=forms.Textarea)
 
 class UserProfileForm(forms.Form):
     OPPORTUNITY_CHOICES = [

@@ -406,6 +406,28 @@ class StagedInterviewAndPrivacyTests(TestCase):
         self.client.post(reverse('account_delete'), {'password': 'test-pass-123'})
         self.assertFalse(User.objects.filter(id=self.user.id).exists())
 
+    def test_job_analysis_survives_an_unusable_model_response(self):
+        """A model reply that is not clean JSON must not 500 the page.
+
+        This path used to run ast.literal_eval over free text with no
+        try/except, so an ordinary LLM slip — a bare `true`, or a sentence
+        before the object — reached the user as a server error.
+        """
+        from prep_app import views
+
+        for reply in ['{"simplified_description": true}', 'Here is the analysis:\n{"skills": []}', '']:
+            with self.subTest(reply=reply[:30]):
+                with patch.object(views, 'genai') as fake_genai:
+                    fake_genai.Client.return_value.models.generate_content.return_value.text = reply
+                    with override_settings(GEMINI_API_KEY='test-key'):
+                        response = self.client.post(reverse('ai_job_info'), {
+                            'job_role': 'Backend Engineer',
+                            'company_name': 'Acme',
+                            'job_description': 'We need Python and Django experience.',
+                        })
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'Backend Engineer')
+
     def test_the_upload_endpoint_requires_a_signed_in_user(self):
         payload = SimpleUploadedFile('anything.bin', b'A' * 1024, content_type='application/octet-stream')
         self.client.logout()
