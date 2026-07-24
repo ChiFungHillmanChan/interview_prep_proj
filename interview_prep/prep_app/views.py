@@ -1,3 +1,4 @@
+import logging
 import re
 try:
     from google import genai
@@ -25,8 +26,8 @@ from .models import Topic, Question, UserSubmission, UserCode
 from .services.ai_client import request_timeout_ms
 from django.contrib.auth.forms import PasswordChangeForm
 
+logger = logging.getLogger(__name__)
 
-# API key is now passed directly to the client
 
 def home(request):
     return render(request, 'prep_app/home.html')
@@ -557,58 +558,48 @@ def run_code(request, question_id):
 @login_required
 @require_http_methods(["POST"])
 def save_code(request, question_id):
+    question = get_object_or_404(Question, id=question_id)
     try:
         data = json.loads(request.body)
-        code = data.get('code')
-        language = data.get('language')
-        
-        # Update or create the UserCode instance
-        user_code, created = UserCode.objects.update_or_create(
-            user=request.user,
-            question_id=question_id,
-            language=language,
-            defaults={'code': code}
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'status': 'error', 'message': 'Malformed request body'}, status=400)
+
+    code = data.get('code')
+    language = data.get('language')
+    if not isinstance(code, str) or not isinstance(language, str) or not language.strip():
+        return JsonResponse(
+            {'status': 'error', 'message': 'Both code and language are required'}, status=400,
         )
-        
-        return JsonResponse({
-            'status': 'success',
-            'message': 'Code saved successfully',
-            'last_modified': user_code.last_modified.isoformat()
-        })
-    except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'message': str(e)
-        }, status=400)
+
+    user_code, _ = UserCode.objects.update_or_create(
+        user=request.user,
+        question=question,
+        language=language[:20],
+        defaults={'code': code},
+    )
+    return JsonResponse({
+        'status': 'success',
+        'message': 'Code saved successfully',
+        'last_modified': user_code.last_modified.isoformat(),
+    })
 
 @login_required
 def get_saved_code(request, question_id):
-    try:
-        language = request.GET.get('language', 'python')  # Default to python
-        user_code = UserCode.objects.filter(
-            user=request.user,
-            question_id=question_id,
-            language=language
-        ).first()
-        
-        if user_code:
-            print (user_code.code, user_code.language)
-            return JsonResponse({
-                'status': 'success',
-                'code': user_code.code,
-                'language': user_code.language,
-                'last_modified': user_code.last_modified.isoformat()
-            })
-        else:
-            return JsonResponse({
-                'status': 'not_found',
-                'code': None
-            })
-    except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'message': str(e)
-        }, status=400)
+    language = request.GET.get('language', 'python')
+    user_code = UserCode.objects.filter(
+        user=request.user,
+        question_id=question_id,
+        language=language,
+    ).first()
+
+    if user_code is None:
+        return JsonResponse({'status': 'not_found', 'code': None})
+    return JsonResponse({
+        'status': 'success',
+        'code': user_code.code,
+        'language': user_code.language,
+        'last_modified': user_code.last_modified.isoformat(),
+    })
     
 
 def serialize_object(obj):
@@ -665,16 +656,14 @@ def file_upload(request):
     """Minimal upload endpoint used by CV Analysis front-end.
     Accepts file(s) and returns success; does not persist content.
     """
+    uploaded = list(request.FILES.keys())
+    if not uploaded:
+        return JsonResponse({'status': 'error', 'message': 'No files provided'}, status=400)
     try:
-        uploaded = list(request.FILES.keys())
-        if not uploaded:
-            return JsonResponse({
-                'status': 'error',
-                'message': 'No files provided'
-            }, status=400)
         # Drain file streams without persisting
-        for key, f in request.FILES.items():
-            _ = f.read()
-        return JsonResponse({'status': 'success', 'files': uploaded})
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+        for _key, handle in request.FILES.items():
+            handle.read()
+    except Exception:
+        logger.exception('Failed to read an uploaded file')
+        return JsonResponse({'status': 'error', 'message': 'Could not read the upload'}, status=400)
+    return JsonResponse({'status': 'success', 'files': uploaded})
