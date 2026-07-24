@@ -1,7 +1,8 @@
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import TestCase, override_settings
+from django.db import connection
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 
 from prep_app.models import (
@@ -11,7 +12,10 @@ from prep_app.models import (
     InterviewTurn,
     SkillEvidence,
 )
+from prep_app.services.ai_client import request_timeout_ms
+from prep_app.services.career_memory import CVImportService
 from prep_app.services.interview_coach import InterviewCoachService
+from prep_app.tests.test_product_flows import docx_upload
 
 
 @override_settings(INTERVIEW_COACH_USE_AI=False)
@@ -179,6 +183,134 @@ class InterviewCoachFlowTests(TestCase):
 
         self.assertFalse(SkillEvidence.objects.filter(user=self.user, name='Kubernetes').exists())
 
+    def test_an_oversized_answer_is_rejected_rather_than_sent_to_the_model(self):
+        """Every other prompt input is bounded; the answer was not.
+
+        DATA_UPLOAD_MAX_MEMORY_SIZE (11MB) was the only ceiling, and the whole
+        body went into the prompt verbatim and was stored in full.
+        """
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Describe a trade-off.',
+        )
+
+        response = self.client.post(reverse('coach_answer', args=[session.id]), {
+            'answer': 'A' * 200_000,
+        })
+
+        self.assertRedirects(response, reverse('coach_session', args=[session.id]))
+        self.assertFalse(InterviewTurn.objects.filter(session=session).exists())
+
+    def test_answering_a_completed_session_records_nothing(self):
+        """The view's status check happens before the (slow) model call.
+
+        A double submit, or a client retry while assessment was in flight,
+        would otherwise land two turns for one question and advance the plan
+        twice. The session is re-read under a row lock before any write.
+        """
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer',
+            current_question='Describe a trade-off.', status='completed',
+        )
+
+        turn = InterviewCoachService(use_ai=False)._persist_answer(
+            session, 'An answer submitted after the interview finished.',
+            InterviewCoachService(use_ai=False)._fallback_evaluation(session, 'x' * 200, []),
+        )
+
+        self.assertIsNone(turn)
+        self.assertFalse(InterviewTurn.objects.filter(session=session).exists())
+
+    def test_adding_the_same_skill_twice_updates_rather_than_erroring(self):
+        for level in ['beginner', 'advanced']:
+            response = self.client.post(reverse('coach_skill_add'), {
+                'name': 'Django', 'self_level': level, 'evidence': 'Built a coach',
+            })
+            self.assertEqual(response.status_code, 302)
+
+        skills = SkillEvidence.objects.filter(user=self.user, name='Django')
+        self.assertEqual(skills.count(), 1)
+        self.assertEqual(skills.get().self_level, 'advanced')
+
+    def test_model_cannot_store_memory_whose_evidence_the_answer_never_said(self):
+        """Grounding gate: evidence must overlap the candidate's real answer.
+
+        Without this the model can attribute an invented quote to the
+        candidate and have it persisted as their Career Memory. Deleting the
+        threshold check used to leave the whole suite green.
+        """
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Describe a project.',
+        )
+        assessment = {
+            'feedback': 'Thanks for the detail.',
+            'scores': {key: 3 for key in InterviewCoachService.SCORE_KEYS},
+            'assessment_confidence': 'low',
+            'demonstrated_skills': [],
+            'memory_updates': [{
+                'category': 'experience',
+                'content': 'Led a migration of the billing platform to Kubernetes.',
+                # Nothing here appears in the answer below.
+                'evidence': 'Led a migration of the billing platform to Kubernetes.',
+                'confidence': 'high',
+            }],
+            'next_focus': 'evidence',
+            'next_question': 'What did you personally do?',
+        }
+
+        with patch.object(InterviewCoachService, 'evaluate_answer', return_value=assessment):
+            self.client.post(reverse('coach_answer', args=[session.id]), {
+                'answer': 'I wrote documentation for the onboarding guide and ran a workshop.',
+            })
+
+        self.assertFalse(
+            CareerMemoryFact.objects.filter(user=self.user, source_type='interview').exists(),
+            'ungrounded evidence was persisted as Career Memory',
+        )
+
+    def test_high_overlap_evidence_is_still_stored(self):
+        """The other side of the gate, so it cannot be "fixed" by rejecting everything."""
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Describe a project.',
+        )
+        answer = 'I used Django authentication and protected each private view with login checks.'
+        assessment = {
+            'feedback': 'Good.',
+            'scores': {key: 3 for key in InterviewCoachService.SCORE_KEYS},
+            'assessment_confidence': 'low',
+            'demonstrated_skills': [],
+            'memory_updates': [{
+                'category': 'experience',
+                'content': 'Implemented Django authentication.',
+                'evidence': 'Used Django authentication and protected the private views.',
+                'confidence': 'high',
+            }],
+            'next_focus': 'evidence',
+            'next_question': 'And then?',
+        }
+
+        with patch.object(InterviewCoachService, 'evaluate_answer', return_value=assessment):
+            self.client.post(reverse('coach_answer', args=[session.id]), {'answer': answer})
+
+        self.assertTrue(
+            CareerMemoryFact.objects.filter(user=self.user, source_type='interview').exists(),
+        )
+
+    def test_the_deterministic_opening_question_is_usable_without_ai(self):
+        """This runs for every session started with AI off, but was always mocked."""
+        profile = self.user.career_profile
+        service = InterviewCoachService(use_ai=False)
+
+        with_focus = service.generate_initial_question(
+            self.user, profile, 'Backend Engineer', '', ['system design'], 'english',
+        )
+        without_anything = service.generate_initial_question(
+            self.user, profile, 'Backend Engineer', '', [], 'english',
+        )
+
+        self.assertIn('system design', with_focus)
+        self.assertIn('Backend Engineer', without_anything)
+        self.assertTrue(without_anything.strip().endswith('?'))
+
     def test_candidate_cannot_open_another_users_interview(self):
         other_session = InterviewSession.objects.create(
             user=self.other_user,
@@ -189,6 +321,65 @@ class InterviewCoachFlowTests(TestCase):
         response = self.client.get(reverse('coach_session', args=[other_session.id]))
 
         self.assertEqual(response.status_code, 404)
+
+
+@override_settings(INTERVIEW_COACH_USE_AI=False)
+class ExternalModelBoundaryTests(TransactionTestCase):
+    """The model call must not hold a database transaction open.
+
+    Production reaches Postgres through a transaction-mode pooler, which hands
+    out a backend connection for the lifetime of a transaction. A slow model
+    response inside one would pin that connection for the whole round trip.
+
+    TransactionTestCase, not TestCase: TestCase wraps each test in its own
+    transaction, so `in_atomic_block` would read True no matter what the code
+    under test does, and the assertion would prove nothing.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='boundary', password='test-pass-123')
+        self.session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Describe a trade-off.',
+        )
+
+    def test_the_model_call_runs_outside_any_open_transaction(self):
+        observed = {}
+
+        def record_state(_self, _session, _answer):
+            observed['in_atomic_block'] = connection.in_atomic_block
+            return InterviewCoachService(use_ai=False)._fallback_evaluation(self.session, 'x' * 200, [])
+
+        with patch.object(InterviewCoachService, 'evaluate_answer', record_state):
+            InterviewCoachService().record_answer(self.session, 'A detailed answer about a real trade-off.')
+
+        self.assertFalse(
+            observed['in_atomic_block'],
+            'the external model call opened while a transaction was held',
+        )
+        self.assertTrue(InterviewTurn.objects.filter(session=self.session).exists())
+
+    def test_cv_extraction_runs_outside_any_open_transaction(self):
+        observed = {}
+
+        def record_state(_self, _text):
+            observed['in_atomic_block'] = connection.in_atomic_block
+            return []
+
+        upload = docx_upload(['Skills', 'Python'])
+        with patch.object(CVImportService, '_extract_structured', record_state):
+            CVImportService().import_upload(self.user, upload)
+
+        self.assertFalse(
+            observed['in_atomic_block'],
+            'CV extraction opened while a transaction was held',
+        )
+
+    def test_the_client_is_given_an_explicit_timeout(self):
+        self.assertGreater(request_timeout_ms(), 0)
+        self.assertLess(
+            request_timeout_ms(), 120_000,
+            'the per-call deadline must stay under the function duration limit',
+        )
 
 
 @override_settings(INTERVIEW_COACH_USE_AI=False)

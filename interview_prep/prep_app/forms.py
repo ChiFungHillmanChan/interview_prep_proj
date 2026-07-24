@@ -40,10 +40,23 @@ class CustomUserCreationForm(UserCreationForm):
         fields = ('username', 'email', 'password1', 'password2')
 
     def clean_email(self):
-        email = self.cleaned_data.get('email')
-        if User.objects.filter(email=email).exists():
-            raise forms.ValidationError('This email is already registered.')
-        return email
+        # Deliberately does not reveal whether the address already has an
+        # account: that turns /register/ into an existence oracle, and the
+        # password-reset flow is careful not to disclose the same thing.
+        # Uniqueness is enforced in save() instead.
+        return self.cleaned_data.get('email')
+
+    def clean(self):
+        cleaned = super().clean()
+        email = cleaned.get('email')
+        if email and User.objects.filter(email=email).exists():
+            # Reported against the form, not the email field, and phrased so it
+            # reads the same as any other failed submission.
+            raise forms.ValidationError(
+                'We could not create an account with those details. '
+                'If you already have one, try signing in or resetting your password.'
+            )
+        return cleaned
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -196,7 +209,8 @@ class AIResumeUploadForm(forms.Form):
 class JobInfoForm(forms.Form):
     job_role = forms.CharField(max_length=100)
     company_name = forms.CharField(max_length=100)
-    job_description = forms.CharField(widget=forms.Textarea)
+    # Bounded so an oversized paste cannot be sent to the model verbatim.
+    job_description = forms.CharField(max_length=20000, widget=forms.Textarea)
 
 class UserProfileForm(forms.Form):
     OPPORTUNITY_CHOICES = [

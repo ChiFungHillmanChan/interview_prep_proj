@@ -23,11 +23,11 @@ class MockClient:
             if "extract information from this resume" in prompt or "resume parser" in prompt:
                 return MockResponse(json.dumps({
                     "contact": {
-                        "full_name": "Chi Fung Hillman Chan",
-                        "email": "hillmanchan709@gmail.com",
-                        "phone": "+44 7818100147",
-                        "address": "Leeds, West Yorkshire",
-                        "links": ["https://github.com/ChiFungHillmanChan", "hillmanchan.com"]
+                        "full_name": "Jane Doe",
+                        "email": "jane.doe@example.com",
+                        "phone": "+44 20 7946 0100",
+                        "address": "Manchester, England",
+                        "links": ["https://github.com/example", "example.com"]
                     },
                     "summary": "Data-driven Computer Science with AI graduate with hands-on experience in Python, SQL for data analysis, visualization, and reporting.",
                     "skills": ["Python", "Java", "JavaScript", "React.js", "Node.js", "Django", "MySQL", "MongoDB", "TensorFlow", "PyTorch"],
@@ -71,7 +71,7 @@ class MockClient:
                     ],
                     "education": [
                         {
-                            "school": "University of Leeds",
+                            "school": "Example University",
                             "degree": "BSc Computer Science with Artificial Intelligence",
                             "field_of_study": "Computer Science with AI", 
                             "year": "Sep 2021 - July 2024",
@@ -109,9 +109,9 @@ class MockClient:
                 return MockResponse(json.dumps({
                     "mapped_content": {
                         "contact_section": {
-                            "name": "Chi Fung Hillman Chan",
-                            "contact_line": "hillmanchan709@gmail.com | +44 7818100147 | Leeds, West Yorkshire",
-                            "links": ["https://github.com/ChiFungHillmanChan", "hillmanchan.com"]
+                            "name": "Jane Doe",
+                            "contact_line": "jane.doe@example.com | +44 20 7946 0100 | Manchester, England",
+                            "links": ["https://github.com/example", "example.com"]
                         },
                         "summary_section": "Data-driven Computer Science with AI graduate with hands-on experience in Python, SQL for data analysis, visualization, and reporting.",
                         "work_section": [
@@ -129,7 +129,7 @@ class MockClient:
                         "skills_section": ["Python", "Java", "JavaScript", "React.js", "Node.js", "Django"],
                         "education_section": [
                             {
-                                "school": "University of Leeds",
+                                "school": "Example University",
                                 "degree_line": "BSc Computer Science with Artificial Intelligence",
                                 "year": "Sep 2021 - July 2024"
                             }

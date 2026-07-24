@@ -11,12 +11,17 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .coach_forms import AccountDeleteForm, CVUploadForm
-from .models import CandidateDocument
+from .models import CandidateDocument, InterviewTurn
 from .services.career_memory import CVImportService
 from .services.document_parser import DocumentParserError
+from .services.rate_limit import rate_limit
 
 
 @login_required
+@rate_limit(
+    'cv_import', limit=20, window_seconds=3600,
+    message='You have uploaded a lot of CVs recently. Please wait a moment and try again.',
+)
 def cv_import(request):
     form = CVUploadForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
@@ -73,10 +78,9 @@ def data_export(request):
         } if profile else None),
         'career_memory': list(request.user.career_memory.values()),
         'skills': list(request.user.skill_evidence.values()),
-        'interviews': [
-            {**session, 'turns': list(request.user.interview_sessions.get(id=session['id']).turns.values())}
-            for session in request.user.interview_sessions.values()
-        ],
+        # Two queries regardless of history size. This used to re-fetch each
+        # session by pk just to reach its turns, costing 1 + 2N.
+        'interviews': _interviews_with_turns(request.user),
         'resume_versions': list(request.user.resume_versions.values()),
         'cv_imports': list(request.user.candidate_documents.values(
             'id', 'original_name', 'file_type', 'size_bytes', 'content_sha256',
@@ -89,6 +93,15 @@ def data_export(request):
     )
     response['Content-Disposition'] = 'attachment; filename="aceinterview-data.json"'
     return response
+
+
+def _interviews_with_turns(user) -> list[dict]:
+    """Every session with its turns attached, in two queries."""
+    sessions = list(user.interview_sessions.values())
+    turns_by_session: dict[int, list[dict]] = {}
+    for turn in InterviewTurn.objects.filter(session__user=user).values():
+        turns_by_session.setdefault(turn['session_id'], []).append(turn)
+    return [{**session, 'turns': turns_by_session.get(session['id'], [])} for session in sessions]
 
 
 @login_required

@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -16,13 +17,14 @@ from .models import CareerMemoryFact, CareerProfile, InterviewSession, SkillEvid
 from .services.interview_coach import InterviewCoachService
 from .services.interview_plan import build_interview_plan
 from .services.career_memory import memory_fingerprint
+from .services.rate_limit import rate_limit
 
 
 @login_required
 def coach_dashboard(request):
     profile, _ = CareerProfile.objects.get_or_create(user=request.user)
     skills = request.user.skill_evidence.all()
-    memory = request.user.career_memory.select_related('source_session')[:12]
+    memory = request.user.career_memory.all()[:12]
     sessions = request.user.interview_sessions.prefetch_related('turns')[:8]
     snapshots = list(request.user.readiness_history.all())
     dimension_trends = {}
@@ -71,12 +73,22 @@ def coach_skill_add(request):
     form = SkillEvidenceForm(request.POST)
     if form.is_valid():
         name = form.cleaned_data['name']
-        skill = request.user.skill_evidence.filter(name__iexact=name).first()
-        if skill is None:
-            skill = SkillEvidence(user=request.user, name=name)
-        skill.self_level = form.cleaned_data['self_level']
-        skill.evidence = form.cleaned_data['evidence']
-        skill.save()
+        # unique_skill_per_user makes the filter-then-save below a race: a
+        # double-clicked submit had both requests see no existing row and the
+        # loser raised IntegrityError, which nothing caught.
+        try:
+            with transaction.atomic():
+                skill = request.user.skill_evidence.filter(name__iexact=name).first()
+                if skill is None:
+                    skill = SkillEvidence(user=request.user, name=name)
+                skill.self_level = form.cleaned_data['self_level']
+                skill.evidence = form.cleaned_data['evidence']
+                skill.save()
+        except IntegrityError:
+            skill = request.user.skill_evidence.get(name=name)
+            skill.self_level = form.cleaned_data['self_level']
+            skill.evidence = form.cleaned_data['evidence']
+            skill.save()
         if skill.evidence:
             fingerprint = memory_fingerprint('skill', skill.name, skill.name)
             request.user.career_memory.update_or_create(
@@ -154,6 +166,10 @@ def coach_memory_reject(request, fact_id):
 
 @login_required
 @require_POST
+@rate_limit(
+    'coach_start', limit=20, window_seconds=3600,
+    message='You have started a lot of interviews recently. Please wait a moment and try again.',
+)
 def coach_start(request):
     profile, _ = CareerProfile.objects.get_or_create(user=request.user)
     form = StartInterviewForm(request.POST)
@@ -214,6 +230,10 @@ def coach_session(request, session_id):
 
 @login_required
 @require_POST
+@rate_limit(
+    'coach_answer', limit=60, window_seconds=3600,
+    message='You are submitting answers very quickly. Please wait a moment and try again.',
+)
 def coach_answer(request, session_id):
     session = get_object_or_404(InterviewSession, id=session_id, user=request.user)
     if session.status != 'active':
@@ -222,8 +242,13 @@ def coach_answer(request, session_id):
 
     form = InterviewAnswerForm(request.POST)
     if form.is_valid():
-        InterviewCoachService().record_answer(session, form.cleaned_data['answer'])
-        messages.success(request, 'Answer assessed. The next question has adapted to your evidence.')
+        turn = InterviewCoachService().record_answer(session, form.cleaned_data['answer'])
+        if turn is None:
+            # The session was completed by a concurrent request while this
+            # answer was being assessed.
+            messages.info(request, 'This interview has already been completed.')
+        else:
+            messages.success(request, 'Answer assessed. The next question has adapted to your evidence.')
     else:
         messages.error(request, 'Please give a little more detail before submitting your answer.')
     return redirect('coach_session', session_id=session.id)

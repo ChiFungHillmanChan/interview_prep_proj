@@ -6,6 +6,7 @@ import re
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -42,7 +43,9 @@ def resume_builder(request):
         return redirect('resume_editor', version_id=version.id)
     return render(request, 'prep_app/resume_builder.html', {
         'form': form,
-        'versions': request.user.resume_versions.all(),
+        # Bounded like every other listing in the app; nothing caps how many
+        # versions a user can create, so this page was unbounded.
+        'versions': request.user.resume_versions.all()[:20],
         'confirmed_count': request.user.career_memory.filter(
             user_confirmed=True, review_status='confirmed'
         ).count(),
@@ -62,22 +65,26 @@ def resume_editor(request, version_id):
 @require_POST
 def resume_save(request, version_id):
     version = get_object_or_404(ResumeVersion, id=version_id, user=request.user)
+    # normalize_saved_document rewrites the underlying CareerMemoryFact rows for
+    # every edited entry, so a failure part-way through must not leave some facts
+    # rewritten and the version unsaved. One transaction covers both.
     try:
-        raw = json.loads(request.body.decode('utf-8'))
-        document = TruthfulResumeService.normalize_saved_document(request.user, raw)
-    except (json.JSONDecodeError, UnicodeDecodeError, ValidationError, ValueError) as exc:
+        with transaction.atomic():
+            raw = json.loads(request.body.decode('utf-8'))
+            document = TruthfulResumeService.normalize_saved_document(request.user, raw)
+            version.document = document
+            version.target_role = document['target_role']
+            version.coverage_percent = document['job_match']['coverage_percent']
+            version.source_memory_ids = sorted({
+                entry['memory_id']
+                for section in ('skills', 'experience', 'projects', 'education', 'achievements', 'certifications', 'languages')
+                for entry in document[section]
+            } | set(document.get('personal_memory_ids', {}).values()))
+            version.save(update_fields=[
+                'document', 'target_role', 'coverage_percent', 'source_memory_ids', 'updated_at'
+            ])
+    except (json.JSONDecodeError, UnicodeDecodeError, ValidationError, ValueError, TypeError) as exc:
         return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-    version.document = document
-    version.target_role = document['target_role']
-    version.coverage_percent = document['job_match']['coverage_percent']
-    version.source_memory_ids = sorted({
-        entry['memory_id']
-        for section in ('skills', 'experience', 'projects', 'education', 'achievements', 'certifications', 'languages')
-        for entry in document[section]
-    } | set(document.get('personal_memory_ids', {}).values()))
-    version.save(update_fields=[
-        'document', 'target_role', 'coverage_percent', 'source_memory_ids', 'updated_at'
-    ])
     return JsonResponse({'ok': True, 'updated_at': version.updated_at.isoformat()})
 
 

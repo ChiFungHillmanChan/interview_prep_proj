@@ -166,8 +166,23 @@ Tests keep authentication, routing, forms, ORM persistence, ownership filters, d
 - SMTP host, account, password, and `DEFAULT_FROM_EMAIL`
 - Gemini key only when AI extraction/coaching is enabled
 
-Secure cookies, HSTS, and the HTTPS redirect enable when debug is off, proxy
-HTTPS headers are supported, and database connections are health-checked.
+Optional, all with safe defaults:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AI_REQUEST_TIMEOUT_SECONDS` | `20` | Per-call deadline for Gemini. The SDK has none of its own, so without this a stalled call runs to the function duration limit instead of falling back. |
+| `EMAIL_TIMEOUT` | `10` | Socket timeout for the SMTP send, which happens inside the request. Django's own default is "block forever". |
+| `CONTENT_SECURITY_POLICY` | built-in | Overrides the whole CSP header. Leave blank to use the policy in `prep_app/middleware.py`. |
+
+Secure cookies, HSTS, and the HTTPS redirect enable when debug is off, and
+database connections are health-checked. `SECURE_PROXY_SSL_HEADER` is set only
+when running on Vercel — trusting `X-Forwarded-Proto` is safe only behind a
+proxy that overwrites it.
+
+Every front-end asset is committed under `interview_prep/static/` and served
+from the app's own origin; a Content-Security-Policy restricts scripts and
+styles to `'self'`. Adding a CDN `<script>` or `<link>` will be blocked in the
+browser.
 
 ## Deployment (Vercel)
 

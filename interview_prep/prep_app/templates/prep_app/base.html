@@ -7,7 +7,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>@media print{@page{size:A4;margin:0}}</style>
     <title>AceInterview - Professional Interview Preparation</title>
-    <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet"> -->
     <link rel="stylesheet" href="/static/css/base.css" />
     <link rel="stylesheet" href="/static/css/tailwind.css" />
     {% block css %}{% endblock %}
@@ -292,7 +291,7 @@
                 </svg>
               </a>
               <a
-                href="//mailto:hillmanchan709@gmail.com"
+                href="mailto:hillmanchan709@gmail.com"
                 target="_blank"
                 class="text-gray-600 hover:text-blue-600"
                 title="Gmail"
@@ -309,7 +308,10 @@
       </div>
     </footer>
 
-    <script src="//unpkg.com/alpinejs" defer></script>
+    <!-- Alpine 3.15.12, vendored. Served from our own origin so a CDN or npm
+         compromise cannot inject script into pages that render private
+         Career Memory. Refresh with the version note in README. -->
+    <script src="{% static 'js/alpine.min.js' %}" defer></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

@@ -7,14 +7,15 @@ Enforces file type and size validation.
 
 import re
 import io
+import zipfile
 from typing import Optional, Tuple
 from django.core.files.uploadedfile import UploadedFile
 from django.core.exceptions import ValidationError
 
 try:
-    import PyPDF2
+    import pypdf
 except ImportError:
-    PyPDF2 = None
+    pypdf = None
 
 try:
     from docx import Document
@@ -34,7 +35,19 @@ class DocumentParser:
     
     # File size limits (in bytes)
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-    
+
+    # A DOCX is a zip archive, so the upload limit above bounds only the
+    # *compressed* bytes. Highly repetitive XML compresses at ~1000:1, which
+    # means a 10MB upload that passes every other check can still expand to
+    # gigabytes and OOM-kill the serverless function. Bound the expanded size
+    # too, generously above any real CV.
+    MAX_DECOMPRESSED_SIZE = 30 * 1024 * 1024  # 30MB
+
+    # A PDF has no single decompressed size to check up front, so bound the
+    # work instead: page count, and total text accumulated during extraction.
+    MAX_PDF_PAGES = 300
+    MAX_EXTRACTED_TEXT = 30 * 1024 * 1024  # 30MB
+
     # Allowed file types
     ALLOWED_EXTENSIONS = {'.pdf', '.docx'}
     ALLOWED_MIME_TYPES = {
@@ -84,6 +97,29 @@ class DocumentParser:
                 )
 
     @classmethod
+    def assert_archive_within_limits(cls, file_content: bytes) -> None:
+        """Reject a DOCX whose contents expand past MAX_DECOMPRESSED_SIZE.
+
+        The declared sizes in the zip central directory are read without
+        decompressing anything, so a bomb is refused before it costs memory.
+
+        Raises:
+            ValidationError: If the archive is malformed or expands too far.
+        """
+        try:
+            with zipfile.ZipFile(io.BytesIO(file_content)) as archive:
+                total = sum(entry.file_size for entry in archive.infolist())
+        except zipfile.BadZipFile as exc:
+            raise ValidationError(f'The uploaded DOCX file is not a readable archive: {exc}')
+
+        if total > cls.MAX_DECOMPRESSED_SIZE:
+            max_mb = cls.MAX_DECOMPRESSED_SIZE / (1024 * 1024)
+            raise ValidationError(
+                f'The uploaded document expands to {total / (1024 * 1024):.0f}MB, '
+                f'over the {max_mb:.0f}MB limit. Please upload a normal CV.'
+            )
+
+    @classmethod
     def parse_pdf(cls, file_content: bytes) -> str:
         """
         Extract text from PDF file.
@@ -97,34 +133,40 @@ class DocumentParser:
         Raises:
             DocumentParserError: If parsing fails
         """
-        if PyPDF2 is None:
+        if pypdf is None:
             raise DocumentParserError(
-                "PyPDF2 library not installed. Please install it to parse PDF files."
+                "pypdf library not installed. Please install it to parse PDF files."
             )
-        
+
         try:
             pdf_stream = io.BytesIO(file_content)
-            pdf_reader = PyPDF2.PdfReader(pdf_stream)
+            pdf_reader = pypdf.PdfReader(pdf_stream)
             
             if len(pdf_reader.pages) == 0:
                 raise DocumentParserError("PDF file contains no pages")
-            
+
             text_parts = []
-            for page in pdf_reader.pages:
+            extracted = 0
+            # Bounded on both axes so a crafted PDF cannot make extraction
+            # arbitrarily expensive: a real CV is a few pages of text.
+            for page in pdf_reader.pages[:cls.MAX_PDF_PAGES]:
                 try:
                     page_text = page.extract_text()
                     if page_text:
                         text_parts.append(page_text)
-                except Exception as e:
+                        extracted += len(page_text)
+                        if extracted > cls.MAX_EXTRACTED_TEXT:
+                            break
+                except Exception:
                     # Continue with other pages if one fails
                     continue
-            
+
             if not text_parts:
                 raise DocumentParserError("Could not extract text from PDF")
             
             return "\n\n".join(text_parts)
             
-        except PyPDF2.errors.PdfReadError as e:
+        except pypdf.errors.PdfReadError as e:
             raise DocumentParserError(f"Invalid PDF file: {e}")
         except Exception as e:
             raise DocumentParserError(f"Failed to parse PDF: {e}")
@@ -148,6 +190,8 @@ class DocumentParser:
                 "python-docx library not installed. Please install it to parse DOCX files."
             )
         
+        cls.assert_archive_within_limits(file_content)
+
         try:
             docx_stream = io.BytesIO(file_content)
             doc = Document(docx_stream)

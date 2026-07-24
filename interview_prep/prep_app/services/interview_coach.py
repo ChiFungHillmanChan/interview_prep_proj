@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import CareerMemoryFact, InterviewSession, InterviewTurn, ReadinessSnapshot, SkillEvidence
+from .ai_client import request_timeout_ms
 from .career_memory import memory_fingerprint
 from .interview_plan import localize_question, section_question
 
@@ -36,7 +37,10 @@ class InterviewCoachService:
         self, user, profile, target_role: str, job_description: str,
         focus_areas: Iterable[str], language: str | None = None,
     ) -> str:
-        skills = list(user.skill_evidence.values('name', 'self_level', 'evidence'))
+        # Bounded like the memory query below it: _update_skill_assessments
+        # adds a row per newly named skill, so this list grows without limit
+        # over a user's history and every entry lands in every prompt.
+        skills = list(user.skill_evidence.values('name', 'self_level', 'evidence')[:20])
         memory = list(user.career_memory.filter(
             user_confirmed=True, review_status='confirmed'
         ).values('category', 'content', 'confidence')[:12])
@@ -80,7 +84,7 @@ Return JSON only: {{"question": "..."}}
         profile = getattr(user, 'career_profile', None)
         skills = list(user.skill_evidence.values(
             'name', 'self_level', 'evidence', 'assessment_level', 'assessment_confidence'
-        ))
+        )[:20])
         memory = list(user.career_memory.filter(
             user_confirmed=True, review_status='confirmed'
         ).values(
@@ -101,7 +105,7 @@ Known skills: {json.dumps(skills, default=str)}
 Career memory: {json.dumps(memory, default=str)}
 Previous turns: {json.dumps(previous_turns, default=str)}
 Current question: {session.current_question}
-Candidate answer: {answer}
+Candidate answer: {answer[:8000]}
 
 Return valid JSON only with this shape:
 {{
@@ -127,9 +131,26 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         result = self._request_json(prompt)
         return self._normalize_result(result) if result else self._fallback_evaluation(session, answer, skills)
 
-    @transaction.atomic
-    def record_answer(self, session: InterviewSession, answer: str) -> InterviewTurn:
+    def record_answer(self, session: InterviewSession, answer: str) -> Optional[InterviewTurn]:
+        # The model call happens before the transaction opens. Production reaches
+        # Postgres through a transaction-mode pooler, so an open transaction
+        # holds a backend connection \u2014 and a slow Gemini response would hold it
+        # for the whole round trip.
         result = self.evaluate_answer(session, answer)
+        return self._persist_answer(session, answer, result)
+
+    @transaction.atomic
+    def _persist_answer(
+        self, session: InterviewSession, answer: str, result: Dict[str, Any]
+    ) -> Optional[InterviewTurn]:
+        # Re-read the session under a row lock. The view's status check happens
+        # before the model call, so a double submit (or a client retry while
+        # the model was slow) could otherwise get two turns recorded for one
+        # question and advance the plan inconsistently.
+        locked = InterviewSession.objects.select_for_update().get(pk=session.pk)
+        if locked.status != 'active':
+            return None
+        session = locked
         if session.language in {'cantonese', 'english_cantonese_feedback'} and not re.search(r'[\u3400-\u9fff]', result['feedback']):
             result['feedback'] = f"廣東話回饋：{result['feedback']}"
         turn = InterviewTurn.objects.create(
@@ -171,17 +192,21 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         return turn
 
     def complete_session(self, session: InterviewSession) -> InterviewSession:
+        # Fetched once and threaded through: the readiness, strongest/weakest
+        # and dimension-average helpers all read the same column of the same
+        # rows, and each used to issue its own query.
+        all_scores = list(session.turns.values_list('scores', flat=True))
         session.status = 'completed'
         session.completed_at = timezone.now()
-        session.readiness_label = self._calculate_readiness(session)
-        turn_count = session.turns.count()
+        session.readiness_label = self._calculate_readiness(session, all_scores)
+        turn_count = len(all_scores)
         if turn_count < 2:
             session.summary = (
                 "There is not enough interview evidence for a reliable level assessment yet. "
                 "Complete at least two detailed answers so the coach can identify a pattern."
             )
         else:
-            strongest, weakest = self._strongest_and_weakest_dimensions(session)
+            strongest, weakest = self._strongest_and_weakest_dimensions(session, all_scores)
             session.summary = (
                 f"Based on {turn_count} answers, your strongest demonstrated area is {strongest}. "
                 f"Your next practice priority is {weakest}. This assessment reflects only the "
@@ -193,7 +218,7 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
             session=session,
             defaults={
                 'readiness_label': session.readiness_label,
-                'dimension_scores': self._dimension_averages(session),
+                'dimension_scores': self._dimension_averages(session, all_scores),
                 'target_role_gaps': self._target_role_gaps(session),
                 'evidence_answer_count': turn_count,
             },
@@ -207,7 +232,11 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         if not api_key:
             return None
         try:
-            client = genai.Client(api_key=api_key)
+            # Without an explicit timeout the SDK passes timeout=None straight
+            # through to httpx, which disables every deadline. A hung call would
+            # then run to the platform's function limit and the caller would
+            # never reach the deterministic fallback below.
+            client = genai.Client(api_key=api_key, http_options={'timeout': request_timeout_ms()})
             response = client.models.generate_content(
                 model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-2.5-flash-lite'),
                 contents=prompt,
@@ -381,6 +410,10 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
                 name=skill_name,
                 defaults={'self_level': 'unknown'},
             )
+            # The running average is a read-modify-write, so the row is locked
+            # for the rest of this transaction; otherwise two concurrent
+            # updates to the same skill would each overwrite the other.
+            skill = SkillEvidence.objects.select_for_update().get(pk=skill.pk)
             previous_total = (skill.average_score or 0) * skill.answers_count
             skill.answers_count += 1
             skill.average_score = round((previous_total + answer_score) / skill.answers_count, 2)
@@ -395,8 +428,9 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
                 'assessment_confidence', 'updated_at'
             ])
 
-    def _calculate_readiness(self, session) -> str:
-        turns = list(session.turns.values_list('scores', flat=True))
+    def _calculate_readiness(self, session, all_scores: Optional[list] = None) -> str:
+        turns = session.turns.values_list('scores', flat=True) if all_scores is None else all_scores
+        turns = list(turns)
         if len(turns) < 2:
             return 'insufficient_evidence'
         values = [
@@ -414,9 +448,9 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
             return 'mostly_ready'
         return 'building'
 
-    def _strongest_and_weakest_dimensions(self, session):
+    def _strongest_and_weakest_dimensions(self, session, all_scores: Optional[list] = None):
         buckets = {key: [] for key in self.SCORE_KEYS}
-        for scores in session.turns.values_list('scores', flat=True):
+        for scores in (session.turns.values_list('scores', flat=True) if all_scores is None else all_scores):
             for key, value in scores.items():
                 if key in buckets and isinstance(value, (int, float)):
                     buckets[key].append(value)
@@ -439,9 +473,9 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         next_index = min(current_index + 1, len(plan) - 1)
         return plan[next_index]['key'], next_index
 
-    def _dimension_averages(self, session: InterviewSession) -> Dict[str, float | None]:
+    def _dimension_averages(self, session: InterviewSession, all_scores: Optional[list] = None) -> Dict[str, float | None]:
         buckets = {key: [] for key in self.SCORE_KEYS}
-        for scores in session.turns.values_list('scores', flat=True):
+        for scores in (session.turns.values_list('scores', flat=True) if all_scores is None else all_scores):
             for key in self.SCORE_KEYS:
                 value = scores.get(key) if isinstance(scores, dict) else None
                 if isinstance(value, (int, float)):

@@ -1,14 +1,11 @@
+import logging
 import re
-import ast 
 try:
     from google import genai
 except ImportError:
     from .mock_genai import genai
-import io
-import PyPDF2
 
-import json 
-from typing import List
+import json
 
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
@@ -20,13 +17,15 @@ from django.urls import reverse_lazy, reverse
 from django.conf import settings
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
-import json
-from .forms import JobInfoForm, UserProfileForm, CVAnalysisForm, CustomAuthenticationForm, CustomUserCreationForm, CodeSubmissionForm
+from .forms import JobInfoForm, CustomAuthenticationForm, CustomUserCreationForm, CodeSubmissionForm
 from .models import Topic, Question, UserSubmission, UserCode
+from .services.ai_client import request_timeout_ms
+from .services.rate_limit import rate_limit
+from django.utils.decorators import method_decorator
 from django.contrib.auth.forms import PasswordChangeForm
 
+logger = logging.getLogger(__name__)
 
-# API key is now passed directly to the client
 
 def home(request):
     return render(request, 'prep_app/home.html')
@@ -79,6 +78,13 @@ class CustomLoginView(LoginView):
             initial['username'] = remembered_username
         return initial
 
+@method_decorator(
+    rate_limit(
+        'password_reset', limit=5, window_seconds=3600,
+        message='Too many password reset requests. Please wait a while before trying again.',
+    ),
+    name='post',
+)
 class CustomPasswordResetView(PasswordResetView):
     template_name = 'prep_app/login_logout_folder/password_reset_form.html'
     email_template_name = 'prep_app/login_logout_folder/password_reset_email.html'
@@ -95,6 +101,10 @@ class CustomPasswordResetCompleteView(PasswordResetCompleteView):
     template_name = 'prep_app/login_logout_folder/password_reset_complete.html'
 
 
+@rate_limit(
+    'register', limit=10, window_seconds=3600,
+    message='Too many sign-up attempts from this connection. Please wait a while and try again.',
+)
 def register(request):
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
@@ -134,12 +144,26 @@ def your_profile(request):
     })
 
 def analyze_job_description(job_role, company_name, job_description):
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    
+    """Summarise a job description, or fall back to a deterministic outline.
+
+    Mirrors the boundary the coach services use: ask for JSON, normalize every
+    field, and never let a model failure reach the user as an exception.
+    """
+    result = _request_job_analysis(job_role, company_name, job_description)
+    if result is None:
+        return _fallback_job_analysis(job_role, company_name, job_description)
+    return result
+
+
+def _request_job_analysis(job_role, company_name, job_description):
+    api_key = getattr(settings, 'GEMINI_API_KEY', '')
+    if not api_key:
+        return None
+
     prompt = f"""
     Analyze the following job description for {job_role} at {company_name}:
 
-    {job_description}
+    {job_description[:6000]}
 
     Provide the following information:
     1. Simplified job description (2-3 sentences)
@@ -147,23 +171,54 @@ def analyze_job_description(job_role, company_name, job_description):
     3. Key benefits (return as a list)
     4. Future interview process steps (list of 3-5 likely steps)
 
-    Format the output as a Python dictionary with keys: 'simplified_description', 'skills', 'benefits', and 'interview_steps'.
+    Return JSON only, with keys 'simplified_description', 'skills', 'benefits'
+    and 'interview_steps'.
     """
-    
-    response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
-        contents=prompt,
-        config={"temperature": 0}
-    )
-    clean_response = response.text.replace("```python", "").replace("```", "").strip()
 
-    print (clean_response)
-    analysis = ast.literal_eval(clean_response.strip())
+    try:
+        client = genai.Client(api_key=api_key, http_options={'timeout': request_timeout_ms()})
+        response = client.models.generate_content(
+            model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-2.5-flash-lite'),
+            contents=prompt,
+            config={"temperature": 0, "response_mime_type": "application/json"},
+        )
+        parsed = json.loads(response.text.strip().replace('```json', '').replace('```', '').strip())
+    except Exception:
+        # Any model, network or parse failure degrades to the outline below.
+        return None
+    if not isinstance(parsed, dict):
+        return None
 
-    # analysis['skills'] = [skill.strip() for skill in analysis['skills'].split(",")]
-    # analysis['benefits'] = [benefit.strip() for benefit in analysis['benefits'].split(".") if benefit]
+    def _list(value):
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip()[:200] for item in value if str(item).strip()][:12]
 
-    return analysis
+    return {
+        'simplified_description': str(parsed.get('simplified_description', '')).strip()[:2000],
+        'skills': _list(parsed.get('skills')),
+        'benefits': _list(parsed.get('benefits')),
+        'interview_steps': _list(parsed.get('interview_steps')),
+    }
+
+
+def _fallback_job_analysis(job_role, company_name, job_description):
+    """Honest, deterministic outline used when the model is unavailable."""
+    quick = _quick_cv_vs_jd(job_description, '')
+    return {
+        'simplified_description': (
+            f'Automatic summarising is unavailable right now, so this is taken directly from the '
+            f'posting for {job_role} at {company_name}. Read the full description below for detail.'
+        ),
+        'skills': quick['job_skills'][:12],
+        'benefits': [],
+        'interview_steps': [
+            'Application review',
+            'Introductory call with a recruiter',
+            'Technical or role-specific interview',
+            'Final interview with the hiring manager',
+        ],
+    }
 def _quick_cv_vs_jd(job_description: str, cv_content: str) -> dict:
     # Deterministic, fast heuristic analysis for immediate UI feedback
     import re
@@ -220,47 +275,6 @@ def _quick_cv_vs_jd(job_description: str, cv_content: str) -> dict:
     }
 
 
-def _filter_question_skills(missing_skills: List[str]) -> List[str]:
-    # Deterministically keep role-relevant skills and exclude obvious benefits/perks
-    canonical_skills = {
-        'python','java','javascript','typescript','node','react','react.js','node.js','django','flask','spring','kotlin',
-        'go','golang','c++','c#','ruby','rails','php','laravel','swift','objective-c',
-        'aws','gcp','azure','docker','kubernetes','terraform','ansible',
-        'sql','mysql','postgresql','postgres','sqlite','mongodb','redis','kafka','spark','hadoop',
-        'pandas','numpy','scikit-learn','sklearn','pytorch','tensorflow','airflow',
-        'git','linux','bash','jira','confluence','agile','scrum','ci/cd','api development','system integration',
-        'html','css','tailwind css','typescript','react native','postgresql'
-    }
-    domain_soft = {
-        'business analysis','systems analysis','project management','data analysis','data visualization','reporting',
-        'stakeholder management','process optimization','decision making','analytical thinking','technical solutions',
-        'software development','full-stack','nlp','classification models','ui rendering','memory optimization'
-    }
-    domain_health = {
-        'healthcare','digital health','patient flow','hospital management'
-    }
-    banned_contains = ['bupa', 'insurance', 'allowance', 'pub', 'visa', 'licence', 'license', 'travel']
-
-    allowed = set(s.lower() for s in (canonical_skills | domain_soft | domain_health))
-    filtered: list[str] = []
-    seen = set()
-    for s in missing_skills:
-        key = (s or '').strip().lower()
-        if not key or key in seen:
-            continue
-        if any(bt in key for bt in banned_contains):
-            continue
-        if key in allowed:
-            filtered.append(s)
-            seen.add(key)
-            continue
-        # Heuristic: keep short 1-2 word technical phrases
-        if len(key.split()) <= 2 and any(ch.isalpha() for ch in key):
-            filtered.append(s)
-            seen.add(key)
-    return filtered
-
-
 @login_required(login_url='/login/')
 def ai_job_info(request):
     if request.method == 'POST':
@@ -278,166 +292,6 @@ def ai_job_info(request):
         form = JobInfoForm()
     return render(request, 'prep_app/job_info.html', {'form': form})
 
-
-def user_profile(request):
-    if request.method == 'POST':
-        form = UserProfileForm(request.POST, request.FILES)
-        if form.is_valid():
-            # Process the form data
-            # You can save it to the database or pass it to the next step
-            # For now, we'll just redirect to the job description page
-            return redirect('job_description')
-    else:
-        form = UserProfileForm()
-    
-    return render(request, 'user_profile.html', {'form': form})
-
-
-def parse_ai_response(response_text):
-    # Remove any markdown code block syntax
-    clean_response = response_text.replace("```python", "").replace("```", "").strip()
-    
-    
-    # Try to parse as JSON first (simpler and more reliable)
-    try:
-        import json
-        result = json.loads(clean_response)
-        return result
-    except json.JSONDecodeError:
-        pass
-    
-    # Initialize the result dictionary
-    result = {
-        'keywords': [],
-        'job_skills': [],
-        'cv_skills': [],
-        'missing_skills': [],
-        'match_score': 0
-    }
-    
-    # Parse keywords
-    keywords_match = re.search(r"'keywords':\s*\[(.*?)\]", clean_response, re.DOTALL)
-    if keywords_match:
-        keywords_str = keywords_match.group(1)
-        keywords = re.findall(r"\('([^']+)',\s*(\d+)\)", keywords_str)
-        result['keywords'] = [{'word': word, 'count': int(count)} for word, count in keywords]
-    
-    # Parse job_skills
-    job_skills_match = re.search(r"'job_skills':\s*\[(.*?)\]", clean_response, re.DOTALL)
-    if job_skills_match:
-        result['job_skills'] = [skill.strip(" '") for skill in job_skills_match.group(1).split(',')]
-    
-    # Parse cv_skills
-    cv_skills_match = re.search(r"'cv_skills':\s*\[(.*?)\]", clean_response, re.DOTALL)
-    if cv_skills_match:
-        result['cv_skills'] = [skill.strip(" '").replace("'", "") for skill in cv_skills_match.group(1).split(',')]
-        
-    # Parse missing_skills
-    missing_skills_match = re.search(r"'missing_skills':\s*\[(.*?)\]", clean_response, re.DOTALL)
-    if missing_skills_match:
-        result['missing_skills'] = [skill.strip(" '").replace("'", "") for skill in missing_skills_match.group(1).split(',')]
-    
-    # Parse match_score
-    match_score_match = re.search(r"'match_score':\s*(\d+)", clean_response)
-    if match_score_match:
-        result['match_score'] = int(match_score_match.group(1))
-    
-    for i in result['cv_skills']:
-        i = i.replace("'", "")
-    return result
-
-def analyze_cv(job_role: str, company_name: str, job_description: str, cv_content: str) -> dict:
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
-    prompt = f"""
-        Compare this CV against this job description and return ONLY a JSON object with these exact keys:
-
-        Job Description:
-        {job_description}
-
-        CV/Resume:
-        {cv_content}
-
-        Extract skills and calculate match. Return ONLY this JSON format:
-        {{
-            "keywords": [("word", count), ("phrase", count)],
-            "job_skills": ["Python", "React", "etc"],
-            "cv_skills": ["Python", "Java", "etc"], 
-            "missing_skills": ["Git", "AWS", "etc"],
-            "match_score": 75
-        }}
-
-        Rules:
-        - job_skills: Technical skills mentioned in the job description
-        - cv_skills: Technical skills found in the CV/resume  
-        - missing_skills: Skills in job_skills but NOT in cv_skills
-        - match_score: Percentage of job_skills that are also in cv_skills
-        - keywords: Important words from job description with their frequency
-        
-        Focus on: programming languages, frameworks, tools, databases, methodologies.
-        Normalize similar terms (js→javascript, react.js→react, etc).
-        
-        Return ONLY the JSON object, no other text.
-    """
-
-    response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
-        contents=prompt,
-        config={"temperature": 0}
-    )
-
-
-    analysis = parse_ai_response(response.text)
-    return analysis
-
-@login_required(login_url='/login/')
-def cv_analysis(request):
-    if request.method == 'POST':
-        form = CVAnalysisForm(request.POST, request.FILES)
-        if form.is_valid():
-            job_role = form.cleaned_data['job_role']
-            company_name = form.cleaned_data['company_name']
-            job_description = form.cleaned_data['job_description']
-            cv_file = form.cleaned_data['cv_file']
-
-            
-            cv_content = ""
-            if cv_file:
-                if cv_file.name.endswith('.pdf'):
-                    pdf_reader = PyPDF2.PdfReader(io.BytesIO(cv_file.read()))
-                    for page in pdf_reader.pages:
-                        cv_content += page.extract_text()
-                else:  
-                    cv_content = cv_file.read().decode('utf-8')
-
-                analysis = analyze_cv(job_role, company_name, job_description, cv_content)
-                # Fallback to deterministic heuristic if AI parsing returns empty/minimal data
-                try:
-                    if not isinstance(analysis, dict):
-                        analysis = {}
-                    job_skills = analysis.get('job_skills') or []
-                    cv_skills = analysis.get('cv_skills') or []
-                    if len(job_skills) == 0 and len(cv_skills) == 0:
-                        quick = _quick_cv_vs_jd(job_description, cv_content)
-                        # Merge preserving any non-empty keys from AI
-                        merged = {**quick, **{k: v for k, v in analysis.items() if v}}
-                        analysis = merged
-                except Exception:
-                    analysis = _quick_cv_vs_jd(job_description, cv_content)
-
-                analysis_json = json.dumps(analysis)
-
-                return render(request, 'prep_app/cv_analysis_results.html', {
-                    'analysis_json': analysis_json,
-                    'job_role': job_role,
-                    'company_name': company_name
-                })
-            else:
-                return render(request, 'prep_app/cv_analysis.html', {'form': form, 'error': 'Error: Cannot find your resume!'})
-        
-    else:
-        form = CVAnalysisForm()
-    return render(request, 'prep_app/cv_analysis.html', {'form': form})
 
 ## AI resume builder upload removed
 
@@ -526,58 +380,48 @@ def run_code(request, question_id):
 @login_required
 @require_http_methods(["POST"])
 def save_code(request, question_id):
+    question = get_object_or_404(Question, id=question_id)
     try:
         data = json.loads(request.body)
-        code = data.get('code')
-        language = data.get('language')
-        
-        # Update or create the UserCode instance
-        user_code, created = UserCode.objects.update_or_create(
-            user=request.user,
-            question_id=question_id,
-            language=language,
-            defaults={'code': code}
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'status': 'error', 'message': 'Malformed request body'}, status=400)
+
+    code = data.get('code')
+    language = data.get('language')
+    if not isinstance(code, str) or not isinstance(language, str) or not language.strip():
+        return JsonResponse(
+            {'status': 'error', 'message': 'Both code and language are required'}, status=400,
         )
-        
-        return JsonResponse({
-            'status': 'success',
-            'message': 'Code saved successfully',
-            'last_modified': user_code.last_modified.isoformat()
-        })
-    except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'message': str(e)
-        }, status=400)
+
+    user_code, _ = UserCode.objects.update_or_create(
+        user=request.user,
+        question=question,
+        language=language[:20],
+        defaults={'code': code},
+    )
+    return JsonResponse({
+        'status': 'success',
+        'message': 'Code saved successfully',
+        'last_modified': user_code.last_modified.isoformat(),
+    })
 
 @login_required
 def get_saved_code(request, question_id):
-    try:
-        language = request.GET.get('language', 'python')  # Default to python
-        user_code = UserCode.objects.filter(
-            user=request.user,
-            question_id=question_id,
-            language=language
-        ).first()
-        
-        if user_code:
-            print (user_code.code, user_code.language)
-            return JsonResponse({
-                'status': 'success',
-                'code': user_code.code,
-                'language': user_code.language,
-                'last_modified': user_code.last_modified.isoformat()
-            })
-        else:
-            return JsonResponse({
-                'status': 'not_found',
-                'code': None
-            })
-    except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'message': str(e)
-        }, status=400)
+    language = request.GET.get('language', 'python')
+    user_code = UserCode.objects.filter(
+        user=request.user,
+        question_id=question_id,
+        language=language,
+    ).first()
+
+    if user_code is None:
+        return JsonResponse({'status': 'not_found', 'code': None})
+    return JsonResponse({
+        'status': 'success',
+        'code': user_code.code,
+        'language': user_code.language,
+        'last_modified': user_code.last_modified.isoformat(),
+    })
     
 
 def serialize_object(obj):
@@ -628,21 +472,20 @@ def serialize_object(obj):
 
 ## AI resume loading endpoints removed
 
+@login_required
 @require_http_methods(["POST"])
 def file_upload(request):
     """Minimal upload endpoint used by CV Analysis front-end.
     Accepts file(s) and returns success; does not persist content.
     """
+    uploaded = list(request.FILES.keys())
+    if not uploaded:
+        return JsonResponse({'status': 'error', 'message': 'No files provided'}, status=400)
     try:
-        uploaded = list(request.FILES.keys())
-        if not uploaded:
-            return JsonResponse({
-                'status': 'error',
-                'message': 'No files provided'
-            }, status=400)
         # Drain file streams without persisting
-        for key, f in request.FILES.items():
-            _ = f.read()
-        return JsonResponse({'status': 'success', 'files': uploaded})
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+        for _key, handle in request.FILES.items():
+            handle.read()
+    except Exception:
+        logger.exception('Failed to read an uploaded file')
+        return JsonResponse({'status': 'error', 'message': 'Could not read the upload'}, status=400)
+    return JsonResponse({'status': 'success', 'files': uploaded})

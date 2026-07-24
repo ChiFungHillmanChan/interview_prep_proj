@@ -204,13 +204,28 @@ class TruthfulResumeService:
 
         job_match = raw.get('job_match') if isinstance(raw.get('job_match'), dict) else {}
         cleaned['job_match'] = {
-            'coverage_percent': min(100, max(0, int(job_match.get('coverage_percent', 0) or 0))),
+            'coverage_percent': cls._coverage_percent(job_match.get('coverage_percent')),
             'matched_requirements': cls._string_list(job_match.get('matched_requirements')),
             'growth_areas': cls._string_list(job_match.get('growth_areas')),
             'questions': cls._string_list(job_match.get('questions')),
             'evidence_basis': f'{len(used_ids)} confirmed Career Memory item(s)',
         }
         return cleaned
+
+    @staticmethod
+    def _coverage_percent(value: Any) -> int:
+        """Clamp a browser-supplied coverage figure to 0-100.
+
+        The body of this request is arbitrary client JSON, so a non-scalar here
+        must surface as a validation error rather than a TypeError out of int().
+        """
+        if value is None or value == '':
+            return 0
+        try:
+            numeric = int(value)
+        except (TypeError, ValueError):
+            raise ValidationError('Coverage percent must be a number')
+        return min(100, max(0, numeric))
 
     @staticmethod
     def _string_list(value: Any) -> list[str]:
