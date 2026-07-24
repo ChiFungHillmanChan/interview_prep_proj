@@ -406,6 +406,23 @@ class StagedInterviewAndPrivacyTests(TestCase):
         self.client.post(reverse('account_delete'), {'password': 'test-pass-123'})
         self.assertFalse(User.objects.filter(id=self.user.id).exists())
 
+    def test_pages_send_a_csp_and_load_no_third_party_assets(self):
+        """Front-end assets are committed, so nothing is fetched off-origin.
+
+        An unpinned CDN script running on pages that render Career Memory is
+        the single largest supply-chain exposure this app had.
+        """
+        for url in [reverse('home'), reverse('login'), reverse('coach_dashboard')]:
+            with self.subTest(url=url):
+                response = self.client.get(url, follow=True)
+                self.assertEqual(response.status_code, 200)
+                policy = response.headers['Content-Security-Policy']
+                self.assertIn("script-src 'self'", policy)
+                self.assertIn("object-src 'none'", policy)
+                body = response.content.decode()
+                for origin in ['unpkg.com', 'cdnjs.cloudflare.com', 'cdn.tailwindcss.com']:
+                    self.assertNotIn(origin, body)
+
     def test_legacy_code_execution_route_is_disabled(self):
         response = self.client.post(reverse('run_code', args=[999]), {'code': 'import os; os.system("whoami")'})
         self.assertEqual(response.status_code, 410)

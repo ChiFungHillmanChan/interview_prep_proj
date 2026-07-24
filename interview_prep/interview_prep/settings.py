@@ -76,6 +76,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'prep_app.middleware.ContentSecurityPolicyMiddleware',
 ]
 
 # Security Settings
@@ -88,6 +89,10 @@ SECURE_HSTS_PRELOAD = True
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=not DEBUG, cast=bool)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+# Every front-end asset is committed under static/, so scripts and styles are
+# restricted to this origin. Leave blank to use the policy defined in
+# prep_app.middleware; set it to override the whole header.
+CONTENT_SECURITY_POLICY = config('CONTENT_SECURITY_POLICY', default='')
 
 # Session Security
 SESSION_COOKIE_SECURE = not DEBUG

@@ -6,17 +6,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AceInterview - Professional Interview Preparation</title>
-    <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet"> -->
     <link rel="stylesheet" href="/static/css/base.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css" rel="stylesheet">
+    <link href="{% static 'vendor/codemirror/codemirror.min.css' %}" rel="stylesheet">
+    <link href="{% static 'vendor/codemirror/theme_monokai.min.css' %}" rel="stylesheet">
     <!-- Add to your head section -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/clike/clike.min.js"></script>
+    <link rel="stylesheet" href="{% static 'vendor/codemirror/codemirror.min.css' %}">
+    <link rel="stylesheet" href="{% static 'vendor/codemirror/theme_dracula.min.css' %}">
+    <script src="{% static 'vendor/codemirror/codemirror.min.js' %}"></script>
+    <script src="{% static 'vendor/codemirror/mode_python_python.min.js' %}"></script>
+    <script src="{% static 'vendor/codemirror/mode_javascript_javascript.min.js' %}"></script>
+    <script src="{% static 'vendor/codemirror/mode_clike_clike.min.js' %}"></script>
     <style>
         /* Custom styles for CodeMirror */
         .CodeMirror {
@@ -50,7 +49,7 @@
             border-left: 2px solid #ffffff;
         }
     </style>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="{% static 'css/tailwind.css' %}" rel="stylesheet">
 </head>
 <body>
     <nav class="bg-gray-800 border-b border-gray-700">
