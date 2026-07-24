@@ -60,6 +60,21 @@ npx --yes tailwindcss@3.4.17 -i static/css/tailwind.input.css -o static/css/tail
 - Keep `INTERVIEW_COACH_USE_AI=False` and `CAREER_MEMORY_USE_AI=False` locally for deterministic runs.
 - Vercel does not run migrations. Apply them from a workstation against `DATABASE_URL_UNPOOLED`;
   the transaction-mode pooler cannot carry DDL reliably (see `README.md` for the exact command).
+  **Migrate before deploying, not after** — code that references a table Vercel has not been told
+  about will 500 on every request that touches it, and there is no build step to catch it.
+- Run `manage.py collectstatic` after pulling. Templates resolve assets through `{% static %}` under
+  `ManifestStaticFilesStorage`, so a missing manifest entry raises `ValueError` at render time
+  rather than degrading. Vercel runs it during the build; local runs do not.
+- **The Vercel project link lives at the repo root, not in `interview_prep/`**, even though the
+  configured Root Directory is `interview_prep`. `vercel env pull` and `vercel --prod` only work
+  from the repo root; run them from `interview_prep/` and the CLI reports `not_linked`.
+- On Apple Silicon, `pip install -r requirements.txt` can install **x86_64 wheels that cannot load**
+  (`incompatible architecture ... need 'arm64'`). This venv's Python is a universal2 build declaring
+  `MACOSX_DEPLOYMENT_TARGET=10.9`, so pip both accepts x86_64 wheels and rejects `macosx_11_0_arm64`
+  ones. `lxml` and `Pillow` are the two affected. Fix by installing the specific arm64/universal2
+  wheel: `pip install --only-binary=:all: --platform macosx_11_0_arm64 --python-version 3.12
+  --implementation cp --abi cp312 --target .venv/lib/python3.12/site-packages --upgrade <pkg>`.
+  Linux deploys are unaffected.
 
 ## Architecture
 

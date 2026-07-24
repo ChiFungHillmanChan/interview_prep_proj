@@ -204,15 +204,33 @@ Settings refuse to boot on Vercel without `DATABASE_URL`, because the SQLite
 fallback lives on a read-only, per-instance filesystem and would silently
 discard every account.
 
-Vercel does not run migrations. Apply them from a workstation against the
-direct endpoint, since a transaction-mode pooler cannot carry DDL reliably:
+Vercel does not run migrations, so a release with a schema change is two
+steps — and the order matters. **Migrate first, then deploy.** Additive
+migrations are safe against the running old code; deploying first leaves every
+request that touches the new table returning 500 until you catch up.
+
+Run both from the **repository root**: the Vercel project link lives there, not
+in `interview_prep/`, even though the configured Root Directory is
+`interview_prep`. Running these from the subdirectory reports `not_linked`.
 
 ```bash
+# 1. Apply migrations against the direct endpoint — a transaction-mode
+#    pooler cannot carry DDL reliably.
 vercel env pull interview_prep/.env.local
 cd interview_prep
 DATABASE_URL="$(grep -m1 '^DATABASE_URL_UNPOOLED=' .env.local | cut -d= -f2-)" \
-  python manage.py migrate
+  ../.venv/bin/python manage.py showmigrations prep_app   # confirm what is pending
+DATABASE_URL="$(grep -m1 '^DATABASE_URL_UNPOOLED=' .env.local | cut -d= -f2-)" \
+  ../.venv/bin/python manage.py migrate
+
+# 2. Deploy, from the repo root.
+cd .. && vercel --prod
 ```
+
+The per-deployment `*.vercel.app` URL sits behind Vercel's deployment
+protection, so curling it returns Vercel's own login page rather than the app —
+useful to know when a smoke test looks wrong. Verify against the stable
+production alias instead (`vercel alias ls | grep interviewprep`).
 
 Pushes to `main` build production; every other branch gets a preview URL. The
 `.vercel.app` wildcard is added to `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`
