@@ -33,3 +33,6 @@ ChiFungHillmanChan.docx
 
 # ---- Local test artifacts ----
 output/
+
+# ---- Vercel ----
+.vercel/
