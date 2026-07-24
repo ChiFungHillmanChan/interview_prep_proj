@@ -24,6 +24,8 @@ import json
 from .forms import JobInfoForm, CVAnalysisForm, CustomAuthenticationForm, CustomUserCreationForm, CodeSubmissionForm
 from .models import Topic, Question, UserSubmission, UserCode
 from .services.ai_client import request_timeout_ms
+from .services.rate_limit import rate_limit
+from django.utils.decorators import method_decorator
 from django.contrib.auth.forms import PasswordChangeForm
 
 logger = logging.getLogger(__name__)
@@ -80,6 +82,13 @@ class CustomLoginView(LoginView):
             initial['username'] = remembered_username
         return initial
 
+@method_decorator(
+    rate_limit(
+        'password_reset', limit=5, window_seconds=3600,
+        message='Too many password reset requests. Please wait a while before trying again.',
+    ),
+    name='post',
+)
 class CustomPasswordResetView(PasswordResetView):
     template_name = 'prep_app/login_logout_folder/password_reset_form.html'
     email_template_name = 'prep_app/login_logout_folder/password_reset_email.html'
@@ -96,6 +105,10 @@ class CustomPasswordResetCompleteView(PasswordResetCompleteView):
     template_name = 'prep_app/login_logout_folder/password_reset_complete.html'
 
 
+@rate_limit(
+    'register', limit=10, window_seconds=3600,
+    message='Too many sign-up attempts from this connection. Please wait a while and try again.',
+)
 def register(request):
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)

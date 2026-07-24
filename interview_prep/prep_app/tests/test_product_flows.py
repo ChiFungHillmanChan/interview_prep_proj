@@ -18,6 +18,7 @@ from prep_app.models import (
     CareerProfile,
     InterviewSession,
     InterviewTurn,
+    RateLimitEvent,
     ReadinessSnapshot,
     ResumeVersion,
     SkillEvidence,
@@ -408,6 +409,30 @@ class StagedInterviewAndPrivacyTests(TestCase):
         self.assertTrue(User.objects.filter(id=self.user.id).exists())
         self.client.post(reverse('account_delete'), {'password': 'test-pass-123'})
         self.assertFalse(User.objects.filter(id=self.user.id).exists())
+
+    def test_expensive_endpoints_are_rate_limited(self):
+        """Each answer is a paid model call, and nothing throttled them.
+
+        Also covers the unauthenticated side: without a limit, /register/
+        doubles as a scriptable account-existence oracle.
+        """
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Describe a trade-off.',
+        )
+        answer = {'answer': 'I compared two designs and measured the result afterwards.'}
+
+        statuses = [
+            self.client.post(reverse('coach_answer', args=[session.id]), answer).status_code
+            for _ in range(62)
+        ]
+
+        self.assertTrue(all(status == 302 for status in statuses))
+        # 60 allowed in the window, so the tail must not have created turns.
+        self.assertLessEqual(InterviewTurn.objects.filter(session=session).count(), 60)
+        self.assertTrue(
+            RateLimitEvent.objects.filter(scope='coach_answer').exists(),
+            'attempts should be recorded against the limit',
+        )
 
     def test_data_export_query_count_does_not_grow_with_interview_history(self):
         """The export used to re-fetch each session by pk to reach its turns.

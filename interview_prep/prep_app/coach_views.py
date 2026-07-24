@@ -17,6 +17,7 @@ from .models import CareerMemoryFact, CareerProfile, InterviewSession, SkillEvid
 from .services.interview_coach import InterviewCoachService
 from .services.interview_plan import build_interview_plan
 from .services.career_memory import memory_fingerprint
+from .services.rate_limit import rate_limit
 
 
 @login_required
@@ -165,6 +166,10 @@ def coach_memory_reject(request, fact_id):
 
 @login_required
 @require_POST
+@rate_limit(
+    'coach_start', limit=20, window_seconds=3600,
+    message='You have started a lot of interviews recently. Please wait a moment and try again.',
+)
 def coach_start(request):
     profile, _ = CareerProfile.objects.get_or_create(user=request.user)
     form = StartInterviewForm(request.POST)
@@ -225,6 +230,10 @@ def coach_session(request, session_id):
 
 @login_required
 @require_POST
+@rate_limit(
+    'coach_answer', limit=60, window_seconds=3600,
+    message='You are submitting answers very quickly. Please wait a moment and try again.',
+)
 def coach_answer(request, session_id):
     session = get_object_or_404(InterviewSession, id=session_id, user=request.user)
     if session.status != 'active':

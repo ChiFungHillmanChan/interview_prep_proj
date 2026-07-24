@@ -14,9 +14,14 @@ from .coach_forms import AccountDeleteForm, CVUploadForm
 from .models import CandidateDocument, InterviewTurn
 from .services.career_memory import CVImportService
 from .services.document_parser import DocumentParserError
+from .services.rate_limit import rate_limit
 
 
 @login_required
+@rate_limit(
+    'cv_import', limit=20, window_seconds=3600,
+    message='You have uploaded a lot of CVs recently. Please wait a moment and try again.',
+)
 def cv_import(request):
     form = CVUploadForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():

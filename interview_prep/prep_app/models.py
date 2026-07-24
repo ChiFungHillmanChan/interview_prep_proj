@@ -308,6 +308,14 @@ class CareerMemoryFact(models.Model):
                 name='unique_memory_fingerprint_per_user',
             ),
         ]
+        indexes = [
+            # The "usable evidence" filter, run on nearly every coach and
+            # resume path: user + user_confirmed + review_status.
+            models.Index(
+                fields=['user', 'user_confirmed', 'review_status'],
+                name='memory_confirmed_idx',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.get_category_display()}: {self.content[:50]}"
@@ -363,6 +371,26 @@ class ResumeVersion(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.user.username})"
+
+
+class RateLimitEvent(models.Model):
+    """One recorded attempt against a rate-limited endpoint.
+
+    Stored in the database rather than a cache because the deployment runs as
+    serverless instances with no shared memory. See services/rate_limit.py.
+    """
+
+    scope = models.CharField(max_length=64)
+    identifier = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['scope', 'identifier', 'created_at'], name='ratelimit_lookup_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.scope} by {self.identifier}'
 
 
 class ReadinessSnapshot(models.Model):
