@@ -5,7 +5,7 @@ try:
 except ImportError:
     from .mock_genai import genai
 import io
-import PyPDF2
+import pypdf
 
 import json 
 from typing import List
@@ -404,7 +404,7 @@ def cv_analysis(request):
             cv_content = ""
             if cv_file:
                 if cv_file.name.endswith('.pdf'):
-                    pdf_reader = PyPDF2.PdfReader(io.BytesIO(cv_file.read()))
+                    pdf_reader = pypdf.PdfReader(io.BytesIO(cv_file.read()))
                     for page in pdf_reader.pages:
                         cv_content += page.extract_text()
                 else:  

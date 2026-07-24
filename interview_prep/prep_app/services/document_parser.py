@@ -12,9 +12,9 @@ from django.core.files.uploadedfile import UploadedFile
 from django.core.exceptions import ValidationError
 
 try:
-    import PyPDF2
+    import pypdf
 except ImportError:
-    PyPDF2 = None
+    pypdf = None
 
 try:
     from docx import Document
@@ -97,14 +97,14 @@ class DocumentParser:
         Raises:
             DocumentParserError: If parsing fails
         """
-        if PyPDF2 is None:
+        if pypdf is None:
             raise DocumentParserError(
-                "PyPDF2 library not installed. Please install it to parse PDF files."
+                "pypdf library not installed. Please install it to parse PDF files."
             )
-        
+
         try:
             pdf_stream = io.BytesIO(file_content)
-            pdf_reader = PyPDF2.PdfReader(pdf_stream)
+            pdf_reader = pypdf.PdfReader(pdf_stream)
             
             if len(pdf_reader.pages) == 0:
                 raise DocumentParserError("PDF file contains no pages")
@@ -124,7 +124,7 @@ class DocumentParser:
             
             return "\n\n".join(text_parts)
             
-        except PyPDF2.errors.PdfReadError as e:
+        except pypdf.errors.PdfReadError as e:
             raise DocumentParserError(f"Invalid PDF file: {e}")
         except Exception as e:
             raise DocumentParserError(f"Failed to parse PDF: {e}")
