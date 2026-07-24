@@ -70,7 +70,7 @@ The repo contains a legacy CV/job-analysis app and the current evidence-based co
 
 - **Current stack**: `coach_views.py`, `career_views.py`, `resume_views.py`, `security_views.py`,
   `coach_forms.py`, and everything under `services/` except `ai_integration.py` / `resume_exporter.py`.
-- **Legacy but still routed**: `views.py` (~25 KB — home, auth, job/CV analysis, the coding module)
+- **Legacy but still routed**: `views.py` (home, auth, job analysis, the coding module)
   plus its `forms.py` and `mock_genai.py`. Keep it working, but put no new coach behavior here.
 - **Legacy and fully dead**: `ai_resume_views.py` (~85 KB, 91 defs) and everything only it imports —
   `services/ai_integration.py`, `services/resume_exporter.py`, `schemas/`, `templates/ai_resume/`.
@@ -150,10 +150,25 @@ fallback would silently discard every account. `*.vercel.app` is appended to `AL
   only JSON endpoint and it reads `request.body` directly.
 - Redirect targets from user input go through `coach_views._safe_return_url`
   (`url_has_allowed_host_and_scheme` against the current host).
-- Templates extend `prep_app/base.html` and use the committed `static/css/tailwind.css` (not a CDN).
+- Templates extend `prep_app/base.html`. **Every front-end asset is committed and served from our
+  own origin** — `static/css/tailwind.css`, `static/js/alpine.min.js` (pinned 3.15.12),
+  `static/vendor/codemirror/`. Nothing loads from a CDN, and
+  `prep_app.middleware.ContentSecurityPolicyMiddleware` sends a CSP restricting `script-src` and
+  `style-src` to `'self'`. Adding a remote `<script>`/`<link>` will be blocked at runtime.
+  Because assets now resolve through `{% static %}` under `ManifestStaticFilesStorage`, run
+  `manage.py collectstatic` locally after pulling; Vercel does it at build time.
   Custom filters live in `templatetags/form_tags.py` (`addclass`, `humanize_key`).
-- Uploads are validated by size (10 MB), extension, MIME type, magic bytes (`%PDF` / `PK`), and
-  parser success in `services/document_parser.py`.
+- Uploads are validated by size (10 MB), extension, MIME type, magic bytes (`%PDF` / `PK`),
+  **decompressed size** (30 MB — a DOCX is a zip, so the upload limit alone bounds only the
+  compressed bytes), and parser success in `services/document_parser.py`.
+- The external model boundary is bounded: `services/ai_client.request_timeout_ms()` gives every
+  Gemini call an explicit deadline (`AI_REQUEST_TIMEOUT_SECONDS`, default 20s), and the call always
+  happens **outside** the database transaction, because production reaches Postgres through a
+  transaction-mode pooler.
+- Expensive or abusable endpoints are throttled by `services/rate_limit.rate_limit`, which counts in
+  the database (`RateLimitEvent`) rather than a cache, since serverless instances share no memory.
+- `admin.py` registers only `Topic` and `Question`. Candidate-data models are deliberately **not**
+  registered — the default ModelAdmin does no per-owner filtering.
 - Never commit `.env`, `db.sqlite3`, `staticfiles/`, logs, or the personal CVs (`ChiFungHillmanChan.*`)
   sitting untracked in `interview_prep/`. `.vercelignore` re-lists them because CLI deploys ignore
   `.gitignore`.
