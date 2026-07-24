@@ -4,11 +4,8 @@ try:
     from google import genai
 except ImportError:
     from .mock_genai import genai
-import io
-import pypdf
 
-import json 
-from typing import List
+import json
 
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
@@ -20,8 +17,7 @@ from django.urls import reverse_lazy, reverse
 from django.conf import settings
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
-import json
-from .forms import JobInfoForm, CVAnalysisForm, CustomAuthenticationForm, CustomUserCreationForm, CodeSubmissionForm
+from .forms import JobInfoForm, CustomAuthenticationForm, CustomUserCreationForm, CodeSubmissionForm
 from .models import Topic, Question, UserSubmission, UserCode
 from .services.ai_client import request_timeout_ms
 from .services.rate_limit import rate_limit
@@ -279,47 +275,6 @@ def _quick_cv_vs_jd(job_description: str, cv_content: str) -> dict:
     }
 
 
-def _filter_question_skills(missing_skills: List[str]) -> List[str]:
-    # Deterministically keep role-relevant skills and exclude obvious benefits/perks
-    canonical_skills = {
-        'python','java','javascript','typescript','node','react','react.js','node.js','django','flask','spring','kotlin',
-        'go','golang','c++','c#','ruby','rails','php','laravel','swift','objective-c',
-        'aws','gcp','azure','docker','kubernetes','terraform','ansible',
-        'sql','mysql','postgresql','postgres','sqlite','mongodb','redis','kafka','spark','hadoop',
-        'pandas','numpy','scikit-learn','sklearn','pytorch','tensorflow','airflow',
-        'git','linux','bash','jira','confluence','agile','scrum','ci/cd','api development','system integration',
-        'html','css','tailwind css','typescript','react native','postgresql'
-    }
-    domain_soft = {
-        'business analysis','systems analysis','project management','data analysis','data visualization','reporting',
-        'stakeholder management','process optimization','decision making','analytical thinking','technical solutions',
-        'software development','full-stack','nlp','classification models','ui rendering','memory optimization'
-    }
-    domain_health = {
-        'healthcare','digital health','patient flow','hospital management'
-    }
-    banned_contains = ['bupa', 'insurance', 'allowance', 'pub', 'visa', 'licence', 'license', 'travel']
-
-    allowed = set(s.lower() for s in (canonical_skills | domain_soft | domain_health))
-    filtered: list[str] = []
-    seen = set()
-    for s in missing_skills:
-        key = (s or '').strip().lower()
-        if not key or key in seen:
-            continue
-        if any(bt in key for bt in banned_contains):
-            continue
-        if key in allowed:
-            filtered.append(s)
-            seen.add(key)
-            continue
-        # Heuristic: keep short 1-2 word technical phrases
-        if len(key.split()) <= 2 and any(ch.isalpha() for ch in key):
-            filtered.append(s)
-            seen.add(key)
-    return filtered
-
-
 @login_required(login_url='/login/')
 def ai_job_info(request):
     if request.method == 'POST':
@@ -337,152 +292,6 @@ def ai_job_info(request):
         form = JobInfoForm()
     return render(request, 'prep_app/job_info.html', {'form': form})
 
-
-def parse_ai_response(response_text):
-    # Remove any markdown code block syntax
-    clean_response = response_text.replace("```python", "").replace("```", "").strip()
-    
-    
-    # Try to parse as JSON first (simpler and more reliable)
-    try:
-        import json
-        result = json.loads(clean_response)
-        return result
-    except json.JSONDecodeError:
-        pass
-    
-    # Initialize the result dictionary
-    result = {
-        'keywords': [],
-        'job_skills': [],
-        'cv_skills': [],
-        'missing_skills': [],
-        'match_score': 0
-    }
-    
-    # Parse keywords
-    keywords_match = re.search(r"'keywords':\s*\[(.*?)\]", clean_response, re.DOTALL)
-    if keywords_match:
-        keywords_str = keywords_match.group(1)
-        keywords = re.findall(r"\('([^']+)',\s*(\d+)\)", keywords_str)
-        result['keywords'] = [{'word': word, 'count': int(count)} for word, count in keywords]
-    
-    # Parse job_skills
-    job_skills_match = re.search(r"'job_skills':\s*\[(.*?)\]", clean_response, re.DOTALL)
-    if job_skills_match:
-        result['job_skills'] = [skill.strip(" '") for skill in job_skills_match.group(1).split(',')]
-    
-    # Parse cv_skills
-    cv_skills_match = re.search(r"'cv_skills':\s*\[(.*?)\]", clean_response, re.DOTALL)
-    if cv_skills_match:
-        result['cv_skills'] = [skill.strip(" '").replace("'", "") for skill in cv_skills_match.group(1).split(',')]
-        
-    # Parse missing_skills
-    missing_skills_match = re.search(r"'missing_skills':\s*\[(.*?)\]", clean_response, re.DOTALL)
-    if missing_skills_match:
-        result['missing_skills'] = [skill.strip(" '").replace("'", "") for skill in missing_skills_match.group(1).split(',')]
-    
-    # Parse match_score
-    match_score_match = re.search(r"'match_score':\s*(\d+)", clean_response)
-    if match_score_match:
-        result['match_score'] = int(match_score_match.group(1))
-    
-    for i in result['cv_skills']:
-        i = i.replace("'", "")
-    return result
-
-def analyze_cv(job_role: str, company_name: str, job_description: str, cv_content: str) -> dict:
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
-    prompt = f"""
-        Compare this CV against this job description and return ONLY a JSON object with these exact keys:
-
-        Job Description:
-        {job_description}
-
-        CV/Resume:
-        {cv_content}
-
-        Extract skills and calculate match. Return ONLY this JSON format:
-        {{
-            "keywords": [("word", count), ("phrase", count)],
-            "job_skills": ["Python", "React", "etc"],
-            "cv_skills": ["Python", "Java", "etc"], 
-            "missing_skills": ["Git", "AWS", "etc"],
-            "match_score": 75
-        }}
-
-        Rules:
-        - job_skills: Technical skills mentioned in the job description
-        - cv_skills: Technical skills found in the CV/resume  
-        - missing_skills: Skills in job_skills but NOT in cv_skills
-        - match_score: Percentage of job_skills that are also in cv_skills
-        - keywords: Important words from job description with their frequency
-        
-        Focus on: programming languages, frameworks, tools, databases, methodologies.
-        Normalize similar terms (js→javascript, react.js→react, etc).
-        
-        Return ONLY the JSON object, no other text.
-    """
-
-    response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
-        contents=prompt,
-        config={"temperature": 0}
-    )
-
-
-    analysis = parse_ai_response(response.text)
-    return analysis
-
-@login_required(login_url='/login/')
-def cv_analysis(request):
-    if request.method == 'POST':
-        form = CVAnalysisForm(request.POST, request.FILES)
-        if form.is_valid():
-            job_role = form.cleaned_data['job_role']
-            company_name = form.cleaned_data['company_name']
-            job_description = form.cleaned_data['job_description']
-            cv_file = form.cleaned_data['cv_file']
-
-            
-            cv_content = ""
-            if cv_file:
-                if cv_file.name.endswith('.pdf'):
-                    pdf_reader = pypdf.PdfReader(io.BytesIO(cv_file.read()))
-                    for page in pdf_reader.pages:
-                        cv_content += page.extract_text()
-                else:  
-                    cv_content = cv_file.read().decode('utf-8')
-
-                analysis = analyze_cv(job_role, company_name, job_description, cv_content)
-                # Fallback to deterministic heuristic if AI parsing returns empty/minimal data
-                try:
-                    if not isinstance(analysis, dict):
-                        analysis = {}
-                    job_skills = analysis.get('job_skills') or []
-                    cv_skills = analysis.get('cv_skills') or []
-                    if len(job_skills) == 0 and len(cv_skills) == 0:
-                        quick = _quick_cv_vs_jd(job_description, cv_content)
-                        # Merge preserving any non-empty keys from AI
-                        merged = {**quick, **{k: v for k, v in analysis.items() if v}}
-                        analysis = merged
-                except Exception:
-                    analysis = _quick_cv_vs_jd(job_description, cv_content)
-
-                analysis_json = json.dumps(analysis)
-
-                return render(request, 'prep_app/cv_analysis_results.html', {
-                    'analysis_json': analysis_json,
-                    'job_role': job_role,
-                    'company_name': company_name
-                })
-            else:
-                return render(request, 'prep_app/cv_analysis.html', {'form': form, 'error': 'Error: Cannot find your resume!'})
-        
-    else:
-        form = CVAnalysisForm()
-    return render(request, 'prep_app/cv_analysis.html', {'form': form})
 
 ## AI resume builder upload removed
 
