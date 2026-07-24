@@ -147,7 +147,7 @@ CV:\n{source_text[:50000]}
             # timeout=None to httpx, which disables every deadline.
             client = genai.Client(api_key=api_key, http_options={'timeout': request_timeout_ms()})
             response = client.models.generate_content(
-                model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-2.5-flash-lite'),
+                model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-3.6-flash'),
                 contents=prompt,
                 config={'temperature': 0, 'response_mime_type': 'application/json'},
             )

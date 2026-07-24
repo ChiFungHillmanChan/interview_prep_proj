@@ -203,7 +203,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 INTERVIEW_COACH_USE_AI = config('INTERVIEW_COACH_USE_AI', default=True, cast=bool)
 CAREER_MEMORY_USE_AI = config('CAREER_MEMORY_USE_AI', default=True, cast=bool)
-INTERVIEW_COACH_MODEL = config('INTERVIEW_COACH_MODEL', default='gemini-2.5-flash-lite')
+# Newest GA Flash model, free of charge on the Standard tier. Google no longer
+# publishes per-model free-tier request caps; check the live quota at
+# https://aistudio.google.com/rate-limit before assuming headroom.
+INTERVIEW_COACH_MODEL = config('INTERVIEW_COACH_MODEL', default='gemini-3.6-flash')
 # Per-call deadline for Gemini. Keep it comfortably below the deployment's
 # function duration limit (Vercel: 120s) so a slow model degrades to the
 # deterministic fallback instead of timing out the whole request.

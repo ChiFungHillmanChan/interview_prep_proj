@@ -238,7 +238,7 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
             # never reach the deterministic fallback below.
             client = genai.Client(api_key=api_key, http_options={'timeout': request_timeout_ms()})
             response = client.models.generate_content(
-                model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-2.5-flash-lite'),
+                model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-3.6-flash'),
                 contents=prompt,
                 config={'temperature': 0.2, 'response_mime_type': 'application/json'},
             )

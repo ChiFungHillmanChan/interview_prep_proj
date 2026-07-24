@@ -178,7 +178,7 @@ def _request_job_analysis(job_role, company_name, job_description):
     try:
         client = genai.Client(api_key=api_key, http_options={'timeout': request_timeout_ms()})
         response = client.models.generate_content(
-            model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-2.5-flash-lite'),
+            model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-3.6-flash'),
             contents=prompt,
             config={"temperature": 0, "response_mime_type": "application/json"},
         )
