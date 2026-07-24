@@ -131,7 +131,7 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         result = self._request_json(prompt)
         return self._normalize_result(result) if result else self._fallback_evaluation(session, answer, skills)
 
-    def record_answer(self, session: InterviewSession, answer: str) -> InterviewTurn:
+    def record_answer(self, session: InterviewSession, answer: str) -> Optional[InterviewTurn]:
         # The model call happens before the transaction opens. Production reaches
         # Postgres through a transaction-mode pooler, so an open transaction
         # holds a backend connection \u2014 and a slow Gemini response would hold it
@@ -140,7 +140,17 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         return self._persist_answer(session, answer, result)
 
     @transaction.atomic
-    def _persist_answer(self, session: InterviewSession, answer: str, result: Dict[str, Any]) -> InterviewTurn:
+    def _persist_answer(
+        self, session: InterviewSession, answer: str, result: Dict[str, Any]
+    ) -> Optional[InterviewTurn]:
+        # Re-read the session under a row lock. The view's status check happens
+        # before the model call, so a double submit (or a client retry while
+        # the model was slow) could otherwise get two turns recorded for one
+        # question and advance the plan inconsistently.
+        locked = InterviewSession.objects.select_for_update().get(pk=session.pk)
+        if locked.status != 'active':
+            return None
+        session = locked
         if session.language in {'cantonese', 'english_cantonese_feedback'} and not re.search(r'[\u3400-\u9fff]', result['feedback']):
             result['feedback'] = f"廣東話回饋：{result['feedback']}"
         turn = InterviewTurn.objects.create(
@@ -396,6 +406,10 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
                 name=skill_name,
                 defaults={'self_level': 'unknown'},
             )
+            # The running average is a read-modify-write, so the row is locked
+            # for the rest of this transaction; otherwise two concurrent
+            # updates to the same skill would each overwrite the other.
+            skill = SkillEvidence.objects.select_for_update().get(pk=skill.pk)
             previous_total = (skill.average_score or 0) * skill.answers_count
             skill.answers_count += 1
             skill.average_score = round((previous_total + answer_score) / skill.answers_count, 2)

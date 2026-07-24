@@ -200,6 +200,37 @@ class InterviewCoachFlowTests(TestCase):
         self.assertRedirects(response, reverse('coach_session', args=[session.id]))
         self.assertFalse(InterviewTurn.objects.filter(session=session).exists())
 
+    def test_answering_a_completed_session_records_nothing(self):
+        """The view's status check happens before the (slow) model call.
+
+        A double submit, or a client retry while assessment was in flight,
+        would otherwise land two turns for one question and advance the plan
+        twice. The session is re-read under a row lock before any write.
+        """
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer',
+            current_question='Describe a trade-off.', status='completed',
+        )
+
+        turn = InterviewCoachService(use_ai=False)._persist_answer(
+            session, 'An answer submitted after the interview finished.',
+            InterviewCoachService(use_ai=False)._fallback_evaluation(session, 'x' * 200, []),
+        )
+
+        self.assertIsNone(turn)
+        self.assertFalse(InterviewTurn.objects.filter(session=session).exists())
+
+    def test_adding_the_same_skill_twice_updates_rather_than_erroring(self):
+        for level in ['beginner', 'advanced']:
+            response = self.client.post(reverse('coach_skill_add'), {
+                'name': 'Django', 'self_level': level, 'evidence': 'Built a coach',
+            })
+            self.assertEqual(response.status_code, 302)
+
+        skills = SkillEvidence.objects.filter(user=self.user, name='Django')
+        self.assertEqual(skills.count(), 1)
+        self.assertEqual(skills.get().self_level, 'advanced')
+
     def test_candidate_cannot_open_another_users_interview(self):
         other_session = InterviewSession.objects.create(
             user=self.other_user,

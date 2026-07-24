@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -71,12 +72,22 @@ def coach_skill_add(request):
     form = SkillEvidenceForm(request.POST)
     if form.is_valid():
         name = form.cleaned_data['name']
-        skill = request.user.skill_evidence.filter(name__iexact=name).first()
-        if skill is None:
-            skill = SkillEvidence(user=request.user, name=name)
-        skill.self_level = form.cleaned_data['self_level']
-        skill.evidence = form.cleaned_data['evidence']
-        skill.save()
+        # unique_skill_per_user makes the filter-then-save below a race: a
+        # double-clicked submit had both requests see no existing row and the
+        # loser raised IntegrityError, which nothing caught.
+        try:
+            with transaction.atomic():
+                skill = request.user.skill_evidence.filter(name__iexact=name).first()
+                if skill is None:
+                    skill = SkillEvidence(user=request.user, name=name)
+                skill.self_level = form.cleaned_data['self_level']
+                skill.evidence = form.cleaned_data['evidence']
+                skill.save()
+        except IntegrityError:
+            skill = request.user.skill_evidence.get(name=name)
+            skill.self_level = form.cleaned_data['self_level']
+            skill.evidence = form.cleaned_data['evidence']
+            skill.save()
         if skill.evidence:
             fingerprint = memory_fingerprint('skill', skill.name, skill.name)
             request.user.career_memory.update_or_create(
@@ -222,8 +233,13 @@ def coach_answer(request, session_id):
 
     form = InterviewAnswerForm(request.POST)
     if form.is_valid():
-        InterviewCoachService().record_answer(session, form.cleaned_data['answer'])
-        messages.success(request, 'Answer assessed. The next question has adapted to your evidence.')
+        turn = InterviewCoachService().record_answer(session, form.cleaned_data['answer'])
+        if turn is None:
+            # The session was completed by a concurrent request while this
+            # answer was being assessed.
+            messages.info(request, 'This interview has already been completed.')
+        else:
+            messages.success(request, 'Answer assessed. The next question has adapted to your evidence.')
     else:
         messages.error(request, 'Please give a little more detail before submitting your answer.')
     return redirect('coach_session', session_id=session.id)
