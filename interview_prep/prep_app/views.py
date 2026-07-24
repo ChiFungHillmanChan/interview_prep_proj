@@ -8,16 +8,8 @@ import io
 import PyPDF2
 
 import json 
-import os
-import requests
-import logging
-import random
-import time
 from typing import List
 
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, update_session_auth_hash
@@ -33,15 +25,6 @@ from .forms import JobInfoForm, UserProfileForm, CVAnalysisForm, CustomAuthentic
 from .models import Topic, Question, UserSubmission, UserCode
 from django.contrib.auth.forms import PasswordChangeForm
 
-from fake_useragent import UserAgent
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # API key is now passed directly to the client
 
@@ -129,7 +112,6 @@ def register(request):
         form = CustomUserCreationForm()
     
     return render(request, 'prep_app/login_logout_folder/register.html', {'form': form})
-
 
 
 @login_required
@@ -295,7 +277,6 @@ def ai_job_info(request):
     else:
         form = JobInfoForm()
     return render(request, 'prep_app/job_info.html', {'form': form})
-
 
 
 def user_profile(request):
@@ -598,302 +579,6 @@ def get_saved_code(request, question_id):
             'message': str(e)
         }, status=400)
     
-
-def write_java_test_file(file_name, code, test_cases, actual_function_name):
-    """Write a properly formatted Java test file."""
-    with open(file_name, 'w') as f:
-        # Add imports
-        f.write('import java.util.*;\n')
-        f.write('import org.json.*;\n\n')
-        
-        # Start Solution class
-        f.write('public class Solution {\n')
-        
-        # Write the submitted solution code (without the class declaration)
-        if 'public class Solution' in code:
-            # Extract just the method from the submitted code
-            method_start = code.find('{') + 1
-            method_end = code.rfind('}')
-            f.write(code[method_start:method_end])
-        else:
-            f.write(code)
-        
-        # Add main method for testing
-        f.write('\n    public static void main(String[] args) {\n')
-        f.write('        Solution solution = new Solution();\n')
-        f.write('        List<Map<String, Object>> results = new ArrayList<>();\n\n')
-        
-        # Add test cases
-        for i, test_case in enumerate(test_cases):
-            test_input = test_case.get('input', [])
-            expected_output = test_case.get('expected')
-            
-            f.write(f'        // Test case {i + 1}\n')
-            f.write('        try {\n')
-            
-            # Handle input array
-            array_str = ', '.join(str(x) for x in test_input)
-            f.write(f'            int[] nums = new int[]{{{array_str}}};\n')
-            
-            # Call method and store result
-            f.write(f'            int result = solution.{actual_function_name}(nums);\n')
-            
-            # Create result map
-            f.write('            Map<String, Object> testResult = new HashMap<>();\n')
-            f.write(f'            testResult.put("index", {i});\n')
-            f.write('            testResult.put("actual_output", result);\n')
-            f.write(f'            testResult.put("expected", {expected_output});\n')
-            f.write(f'            testResult.put("passed", result == {expected_output});\n')
-            f.write('            results.add(testResult);\n')
-            
-            # Add catch block
-            f.write('        } catch (Exception e) {\n')
-            f.write('            Map<String, Object> testResult = new HashMap<>();\n')
-            f.write(f'            testResult.put("index", {i});\n')
-            f.write('            testResult.put("actual_output", e.toString());\n')
-            f.write(f'            testResult.put("expected", {expected_output});\n')
-            f.write('            testResult.put("passed", false);\n')
-            f.write('            results.add(testResult);\n')
-            f.write('        }\n\n')
-        
-        # Add JSON output
-        f.write('        // Convert results to JSON and print\n')
-        f.write('        System.out.println(new JSONArray(results).toString());\n')
-        
-        # Close main method and class
-        f.write('    }\n')
-        f.write('}\n')
-
-
-
-class JobScraper:
-    def __init__(self, timeout=15):
-        # Advanced logging
-        logging.basicConfig(level=logging.INFO, 
-                            format='%(asctime)s - %(levelname)s: %(message)s')
-        self.logger = logging.getLogger(__name__)
-
-        # Chrome WebDriver with extensive options
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")  # Run in background
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--disable-extensions")
-        
-        # User agent rotation
-        self.ua = UserAgent()
-        chrome_options.add_argument(f"user-agent={self.ua.random}")
-
-        try:
-            self.driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()),
-                options=chrome_options
-            )
-            self.driver.set_page_load_timeout(timeout)
-        except Exception as e:
-            self.logger.error(f"WebDriver initialization error: {e}")
-            raise
-
-    def _safe_get(self, url):
-        """Safely load URL with error handling"""
-        try:
-            self.driver.get(url)
-            time.sleep(random.uniform(2, 5))  # Random delay
-            return True
-        except TimeoutException:
-            self.logger.error(f"Timeout loading {url}")
-        except WebDriverException as e:
-            self.logger.error(f"WebDriver error loading {url}: {e}")
-        return False
-
-    def scrape_linkedin(self, role, location):
-        jobs = []
-        try:
-            url = f"https://www.linkedin.com/jobs/search?keywords={role}&location={location}"
-            if not self._safe_get(url):
-                return jobs
-
-            try:
-                # Wait for job listings to load
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div.base-card'))
-                )
-            except TimeoutException:
-                self.logger.warning("No job listings found on LinkedIn")
-                return jobs
-
-            # Find job listings
-            job_listings = self.driver.find_elements(By.CSS_SELECTOR, 'div.base-card')
-            self.logger.info(f"Found {len(job_listings)} LinkedIn jobs")
-
-            for job in job_listings[:5]:
-                try:
-                    title = job.find_element(By.CSS_SELECTOR, 'h3.base-search-card__title').text
-                    company = job.find_element(By.CSS_SELECTOR, 'h4.base-search-card__subtitle').text
-                    apply_url = job.find_element(By.CSS_SELECTOR, 'a.base-card__full-link').get_attribute('href')
-                    
-                    jobs.append({
-                        'title': title,
-                        'company': company,
-                        'location': location,
-                        'post_date': datetime.now().strftime('%Y-%m-%d'),
-                        'end_date': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'),
-                        'apply_url': apply_url,
-                        'source': 'LinkedIn'
-                    })
-                except Exception as e:
-                    self.logger.error(f"Error extracting LinkedIn job: {e}")
-        
-        except Exception as e:
-            self.logger.error(f"Error scraping LinkedIn: {str(e)}")
-        
-        return jobs
-
-    def scrape_indeed(self, role, location):
-        jobs = []
-        url_SE_Leeds_West_Yorkshure_hybrid_5miles ='https://uk.indeed.com/jobs?q=software+engineer&l=Leeds%2C+West+Yorkshire&sc=0kf%3Aattr%28PAXZC%29%3B&radius=5&fromage=last&vjk=068a06f87745ffc6'
-        url_SE_Leeds_West_Yorkshure_Last3days_5miles = 'https://uk.indeed.com/jobs?q=software+engineer&l=Leeds%2C+West+Yorkshire&radius=5&fromage=3&vjk=068a06f87745ffc6'
-        url_SEA = 'https://uk.indeed.com/jobs?q=software%20engineer%20apprenticeship&l=&from=searchOnDesktopSerp'
-        url_JSD = 'https://uk.indeed.com/jobs?q=junior+software+developer&l=&from=searchOnDesktopSerp&vjk=5c438be06df61aa0'
-        try:
-            url = f"https://www.indeed.com/jobs?q={role}&l={location}"
-            if not self._safe_get(url):
-                return jobs
-
-            try:
-                # Wait for job listings to load
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div.job_seen_beacon'))
-                )
-            except TimeoutException:
-                self.logger.warning("No job listings found on Indeed")
-                return jobs
-
-            job_listings = self.driver.find_elements(By.CSS_SELECTOR, 'div.job_seen_beacon')
-            self.logger.info(f"Found {len(job_listings)} Indeed jobs")
-
-            for job in job_listings[:5]:
-                try:
-                    title = job.find_element(By.CSS_SELECTOR, 'h2.jobTitle').text
-                    company = job.find_element(By.CSS_SELECTOR, 'span.companyName').text
-                    apply_url = job.find_element(By.CSS_SELECTOR, 'a.jcs-JobTitle').get_attribute('href')
-                    
-                    jobs.append({
-                        'title': title,
-                        'company': company,
-                        'location': location,
-                        'post_date': datetime.now().strftime('%Y-%m-%d'),
-                        'end_date': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'),
-                        'apply_url': apply_url,
-                        'source': 'Indeed'
-                    })
-                except Exception as e:
-                    self.logger.error(f"Error extracting Indeed job: {e}")
-        
-        except Exception as e:
-            self.logger.error(f"Error scraping Indeed: {str(e)}")
-        
-        return jobs
-
-    def scrape_glassdoor(self, role, location):
-        jobs = []
-        try:
-            url = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={role}&locT=C&locId={location}"
-            if not self._safe_get(url):
-                return jobs
-
-            try:
-                # Wait for job listings to load
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'li.react-job-listing'))
-                )
-            except TimeoutException:
-                self.logger.warning("No job listings found on Glassdoor")
-                return jobs
-
-            job_listings = self.driver.find_elements(By.CSS_SELECTOR, 'li.react-job-listing')
-            self.logger.info(f"Found {len(job_listings)} Glassdoor jobs")
-
-            for job in job_listings[:5]:
-                try:
-                    title = job.find_element(By.CSS_SELECTOR, 'a.jobLink').text
-                    company = job.find_element(By.CSS_SELECTOR, 'div.jobHeader').text
-                    apply_url = job.find_element(By.CSS_SELECTOR, 'a.jobLink').get_attribute('href')
-                    
-                    jobs.append({
-                        'title': title,
-                        'company': company,
-                        'location': location,
-                        'post_date': datetime.now().strftime('%Y-%m-%d'),
-                        'end_date': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'),
-                        'apply_url': apply_url,
-                        'source': 'Glassdoor'
-                    })
-                except Exception as e:
-                    self.logger.error(f"Error extracting Glassdoor job: {e}")
-        
-        except Exception as e:
-            self.logger.error(f"Error scraping Glassdoor: {str(e)}")
-        
-        return jobs
-
-    def __del__(self):
-        """Close browser when done"""
-        if hasattr(self, 'driver'):
-            self.driver.quit()
-
-
-@require_http_methods(["GET", "POST"])
-def job_search(request):
-    """
-    View to handle job search functionality
-    """
-    context = {}
-    
-    # Check if it's a POST request
-    if request.method == "POST":
-        # Get search parameters
-        role = request.POST.get('role', '')
-        location = request.POST.get('location', '')
-
-        # Validate input
-        if not role or not location:
-            context['error'] = 'Please provide both role and location'
-            return render(request, 'prep_app/job_search.html', context)
-
-        # Initialize scraper
-        scraper = JobScraper()
-        all_jobs = []
-
-        # Use ThreadPoolExecutor for parallel scraping
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            # Create futures for each job board
-            futures = [
-                executor.submit(scraper.scrape_linkedin, role, location),
-                executor.submit(scraper.scrape_indeed, role, location),
-                executor.submit(scraper.scrape_glassdoor, role, location)
-            ]
-            
-            for future in futures:
-                try:
-                    # Extend all_jobs with results from each future
-                    all_jobs.extend(future.result())
-                except Exception as e:
-                    logging.error(f"Error in scraping: {str(e)}")
-
-        # Sort results by post date (most recent first)
-        all_jobs = sorted(all_jobs, key=lambda x: x.get('post_date', '1970-01-01'), reverse=True)
-        
-        # Add jobs to context
-        context['jobs'] = all_jobs
-        context['search_params'] = {
-            'role': role,
-            'location': location
-        }
-
-    return render(request, 'prep_app/job_search.html', context)
-
 
 def serialize_object(obj):
     """Convert complex objects to JSON-serializable format"""

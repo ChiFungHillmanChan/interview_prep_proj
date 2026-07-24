@@ -23,8 +23,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
+# Vercel sets VERCEL=1 in every build and function invocation.
+ON_VERCEL = bool(os.environ.get('VERCEL'))
+
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+# The default is False so that a forgotten environment variable fails closed
+# rather than exposing tracebacks and secrets on a deployed host.
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 # A local-only default keeps first-run setup approachable. Production refuses it.
 _DEVELOPMENT_SECRET = 'aceinterview-local-development-key-change-before-deploying'
@@ -37,6 +42,14 @@ CSRF_TRUSTED_ORIGINS = config(
     'CSRF_TRUSTED_ORIGINS', default='',
     cast=lambda v: [s.strip() for s in v.split(',') if s.strip()],
 )
+
+if ON_VERCEL:
+    # Preview deployments get a generated *.vercel.app hostname per commit, so
+    # the exact host is not knowable ahead of time.
+    ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS + ['.vercel.app']))
+    CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(
+        CSRF_TRUSTED_ORIGINS + ['https://*.vercel.app']
+    ))
 
 
 # Application definition
@@ -107,6 +120,8 @@ WSGI_APPLICATION = 'interview_prep.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# SQLite is local-development only. A serverless deployment has a read-only
+# filesystem and no instance affinity, so production must use DATABASE_URL.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -114,7 +129,18 @@ DATABASES = {
     }
 }
 if config('DATABASE_URL', default=''):
-    DATABASES['default'] = dj_database_url.config(conn_max_age=600, conn_health_checks=True)
+    DATABASES['default'] = dj_database_url.config(
+        conn_max_age=config('DB_CONN_MAX_AGE', default=600, cast=int),
+        conn_health_checks=True,
+        ssl_require=True,
+    )
+    # Managed Postgres is reached through a transaction-mode connection pooler,
+    # which cannot hold the named cursors Django would otherwise open.
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
+elif ON_VERCEL:
+    raise ImproperlyConfigured(
+        'DATABASE_URL must be set on Vercel; the SQLite fallback is ephemeral.'
+    )
 
 
 # Password validation

@@ -38,7 +38,8 @@ urlpatterns = [
     path('question/<int:question_id>/get_saved_code', views.get_saved_code, name='get_saved_code'),
 
     path('your-profile/', views.your_profile, name='your_profile'),
-    path('job-search/', views.job_search, name='job_search'),
+    # Job search removed: it relied on in-process headless Chrome, which cannot
+    # run on a serverless runtime with a read-only filesystem.
     path('upload/', views.file_upload, name='file_upload'),
 
     # Personal AI Interview Coach and Career Memory

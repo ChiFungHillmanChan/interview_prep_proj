@@ -53,11 +53,6 @@
               class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if request.resolver_match.url_name == 'customer_support' %}text-blue-600 hover:text-blue-600{% endif %}"
               >Customer Support</a
             >
-            <a
-              href="{% url 'job_search' %}"
-              class="nav-link text-gray-600 hover:text-blue-600 transition-colors {% if request.resolver_match.url_name == 'customer_support' %}text-blue-600 hover:text-blue-600{% endif %}"
-              >Search For Job Vacancies</a
-            >
             {% if user.is_authenticated %}
             <!-- User Dropdown -->
             <div
