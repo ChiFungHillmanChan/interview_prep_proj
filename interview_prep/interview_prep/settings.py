@@ -200,6 +200,10 @@ GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 INTERVIEW_COACH_USE_AI = config('INTERVIEW_COACH_USE_AI', default=True, cast=bool)
 CAREER_MEMORY_USE_AI = config('CAREER_MEMORY_USE_AI', default=True, cast=bool)
 INTERVIEW_COACH_MODEL = config('INTERVIEW_COACH_MODEL', default='gemini-2.5-flash-lite')
+# Per-call deadline for Gemini. Keep it comfortably below the deployment's
+# function duration limit (Vercel: 120s) so a slow model degrades to the
+# deterministic fallback instead of timing out the whole request.
+AI_REQUEST_TIMEOUT_SECONDS = config('AI_REQUEST_TIMEOUT_SECONDS', default=20, cast=int)
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = config('GOOGLE_OAUTH_CLIENT_ID', default='')
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = config('GOOGLE_OAUTH_CLIENT_SECRET', default='')

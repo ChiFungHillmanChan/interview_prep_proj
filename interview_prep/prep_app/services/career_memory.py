@@ -28,6 +28,7 @@ from django.conf import settings
 from django.db import transaction
 
 from ..models import CandidateDocument, CareerMemoryFact
+from .ai_client import request_timeout_ms
 from .document_parser import DocumentParser
 
 try:
@@ -58,7 +59,6 @@ class CVImportService:
         configured = getattr(settings, 'CAREER_MEMORY_USE_AI', True)
         self.use_ai = configured if use_ai is None else use_ai
 
-    @transaction.atomic
     def import_upload(self, user, uploaded_file) -> tuple[CandidateDocument, int, bool]:
         DocumentParser.validate_file(uploaded_file)
         raw_bytes = uploaded_file.read()
@@ -69,19 +69,36 @@ class CVImportService:
             return existing, 0, True
 
         extracted_text, file_type = DocumentParser.parse_file(uploaded_file)
-        document = CandidateDocument.objects.create(
-            user=user,
-            original_name=uploaded_file.name[:255],
-            file_type=file_type,
-            mime_type=(getattr(uploaded_file, 'content_type', '') or '')[:120],
-            size_bytes=uploaded_file.size,
-            content_sha256=digest,
-            extracted_text=extracted_text,
-            status='processing',
-        )
-
+        # Parsing and the model call both happen before the transaction opens:
+        # production reaches Postgres through a transaction-mode pooler, so an
+        # open transaction holds a backend connection for its whole duration.
         raw_items = self._extract_structured(extracted_text)
         normalized_items = self.normalize_items(raw_items, extracted_text)
+        return self._persist_import(
+            user, uploaded_file, digest, extracted_text, file_type, normalized_items
+        )
+
+    @transaction.atomic
+    def _persist_import(
+        self, user, uploaded_file, digest: str, extracted_text: str,
+        file_type: str, normalized_items: list[dict[str, Any]],
+    ) -> tuple[CandidateDocument, int, bool]:
+        document, created = CandidateDocument.objects.get_or_create(
+            user=user,
+            content_sha256=digest,
+            defaults={
+                'original_name': uploaded_file.name[:255],
+                'file_type': file_type,
+                'mime_type': (getattr(uploaded_file, 'content_type', '') or '')[:120],
+                'size_bytes': uploaded_file.size,
+                'extracted_text': extracted_text,
+                'status': 'processing',
+            },
+        )
+        if not created:
+            # A concurrent upload of the same file won the race.
+            return document, 0, True
+
         created_count = 0
         for item in normalized_items:
             _, created = CareerMemoryFact.objects.get_or_create(
@@ -126,7 +143,9 @@ CV:\n{source_text[:50000]}
         if not api_key:
             return None
         try:
-            client = genai.Client(api_key=api_key)
+            # See interview_coach._request_timeout_ms: the SDK otherwise passes
+            # timeout=None to httpx, which disables every deadline.
+            client = genai.Client(api_key=api_key, http_options={'timeout': request_timeout_ms()})
             response = client.models.generate_content(
                 model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-2.5-flash-lite'),
                 contents=prompt,

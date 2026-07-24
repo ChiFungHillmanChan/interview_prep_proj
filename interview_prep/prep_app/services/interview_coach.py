@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import CareerMemoryFact, InterviewSession, InterviewTurn, ReadinessSnapshot, SkillEvidence
+from .ai_client import request_timeout_ms
 from .career_memory import memory_fingerprint
 from .interview_plan import localize_question, section_question
 
@@ -127,9 +128,16 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         result = self._request_json(prompt)
         return self._normalize_result(result) if result else self._fallback_evaluation(session, answer, skills)
 
-    @transaction.atomic
     def record_answer(self, session: InterviewSession, answer: str) -> InterviewTurn:
+        # The model call happens before the transaction opens. Production reaches
+        # Postgres through a transaction-mode pooler, so an open transaction
+        # holds a backend connection \u2014 and a slow Gemini response would hold it
+        # for the whole round trip.
         result = self.evaluate_answer(session, answer)
+        return self._persist_answer(session, answer, result)
+
+    @transaction.atomic
+    def _persist_answer(self, session: InterviewSession, answer: str, result: Dict[str, Any]) -> InterviewTurn:
         if session.language in {'cantonese', 'english_cantonese_feedback'} and not re.search(r'[\u3400-\u9fff]', result['feedback']):
             result['feedback'] = f"廣東話回饋：{result['feedback']}"
         turn = InterviewTurn.objects.create(
@@ -207,7 +215,11 @@ Each non-null score must be an integer from 1 to 5. Keep memory updates factual 
         if not api_key:
             return None
         try:
-            client = genai.Client(api_key=api_key)
+            # Without an explicit timeout the SDK passes timeout=None straight
+            # through to httpx, which disables every deadline. A hung call would
+            # then run to the platform's function limit and the caller would
+            # never reach the deterministic fallback below.
+            client = genai.Client(api_key=api_key, http_options={'timeout': request_timeout_ms()})
             response = client.models.generate_content(
                 model=getattr(settings, 'INTERVIEW_COACH_MODEL', 'gemini-2.5-flash-lite'),
                 contents=prompt,

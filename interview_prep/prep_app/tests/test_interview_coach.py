@@ -1,7 +1,8 @@
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import TestCase, override_settings
+from django.db import connection
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 
 from prep_app.models import (
@@ -11,7 +12,10 @@ from prep_app.models import (
     InterviewTurn,
     SkillEvidence,
 )
+from prep_app.services.ai_client import request_timeout_ms
+from prep_app.services.career_memory import CVImportService
 from prep_app.services.interview_coach import InterviewCoachService
+from prep_app.tests.test_product_flows import docx_upload
 
 
 @override_settings(INTERVIEW_COACH_USE_AI=False)
@@ -189,6 +193,65 @@ class InterviewCoachFlowTests(TestCase):
         response = self.client.get(reverse('coach_session', args=[other_session.id]))
 
         self.assertEqual(response.status_code, 404)
+
+
+@override_settings(INTERVIEW_COACH_USE_AI=False)
+class ExternalModelBoundaryTests(TransactionTestCase):
+    """The model call must not hold a database transaction open.
+
+    Production reaches Postgres through a transaction-mode pooler, which hands
+    out a backend connection for the lifetime of a transaction. A slow model
+    response inside one would pin that connection for the whole round trip.
+
+    TransactionTestCase, not TestCase: TestCase wraps each test in its own
+    transaction, so `in_atomic_block` would read True no matter what the code
+    under test does, and the assertion would prove nothing.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='boundary', password='test-pass-123')
+        self.session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Describe a trade-off.',
+        )
+
+    def test_the_model_call_runs_outside_any_open_transaction(self):
+        observed = {}
+
+        def record_state(_self, _session, _answer):
+            observed['in_atomic_block'] = connection.in_atomic_block
+            return InterviewCoachService(use_ai=False)._fallback_evaluation(self.session, 'x' * 200, [])
+
+        with patch.object(InterviewCoachService, 'evaluate_answer', record_state):
+            InterviewCoachService().record_answer(self.session, 'A detailed answer about a real trade-off.')
+
+        self.assertFalse(
+            observed['in_atomic_block'],
+            'the external model call opened while a transaction was held',
+        )
+        self.assertTrue(InterviewTurn.objects.filter(session=self.session).exists())
+
+    def test_cv_extraction_runs_outside_any_open_transaction(self):
+        observed = {}
+
+        def record_state(_self, _text):
+            observed['in_atomic_block'] = connection.in_atomic_block
+            return []
+
+        upload = docx_upload(['Skills', 'Python'])
+        with patch.object(CVImportService, '_extract_structured', record_state):
+            CVImportService().import_upload(self.user, upload)
+
+        self.assertFalse(
+            observed['in_atomic_block'],
+            'CV extraction opened while a transaction was held',
+        )
+
+    def test_the_client_is_given_an_explicit_timeout(self):
+        self.assertGreater(request_timeout_ms(), 0)
+        self.assertLess(
+            request_timeout_ms(), 120_000,
+            'the per-call deadline must stay under the function duration limit',
+        )
 
 
 @override_settings(INTERVIEW_COACH_USE_AI=False)
