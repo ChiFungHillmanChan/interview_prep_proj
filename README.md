@@ -75,10 +75,12 @@ Rules enforced in code and tests:
 interview_prep_proj/
 ├── AGENTS.md
 ├── README.md
-├── requirement.txt
-├── Procfile
-└── interview_prep/
+├── .vercelignore
+└── interview_prep/            # Vercel Root Directory
     ├── manage.py
+    ├── requirements.txt
+    ├── vercel.json
+    ├── .python-version
     ├── .env.example
     ├── interview_prep/settings.py
     └── prep_app/
@@ -102,18 +104,23 @@ The large `ai_resume_views.py`, old `ai_resume` templates, and old `resume_expor
 
 ## Local setup
 
-Requires Python 3.11.
+Requires Python 3.12, matching `interview_prep/.python-version` and the
+deployed runtime.
 
 ```bash
-python3.11 -m venv env
-source env/bin/activate
+python3.12 -m venv .venv
+source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirement.txt
+pip install -r interview_prep/requirements.txt
 cp interview_prep/.env.example interview_prep/.env
 cd interview_prep
 python manage.py migrate
 python manage.py runserver
 ```
+
+`DEBUG` defaults to `False` so a deployed environment fails closed. Set
+`DEBUG=True` in your local `.env` or the dev server will force HTTPS
+redirects and secure-only cookies against `http://localhost`.
 
 For deterministic local development, keep these values in `.env`:
 
@@ -129,10 +136,10 @@ The original uploaded CV binary is parsed in memory and not retained. Parsed tex
 From `interview_prep/`:
 
 ```bash
-../env/bin/python manage.py test -v 2
-../env/bin/python manage.py check
-../env/bin/python manage.py makemigrations --check --dry-run
-../env/bin/python -m compileall interview_prep prep_app
+../.venv/bin/python manage.py test -v 2
+../.venv/bin/python manage.py check
+../.venv/bin/python manage.py makemigrations --check --dry-run
+../.venv/bin/python -m compileall interview_prep prep_app
 ```
 
 Production settings check:
@@ -142,7 +149,7 @@ DEBUG=False \
 DJANGO_SECRET_KEY='replace-with-at-least-50-random-characters-before-deploy' \
 ALLOWED_HOSTS='aceinterview.example.com' \
 CSRF_TRUSTED_ORIGINS='https://aceinterview.example.com' \
-../env/bin/python manage.py check --deploy
+../.venv/bin/python manage.py check --deploy
 ```
 
 Tests keep authentication, routing, forms, ORM persistence, ownership filters, document parsing, serialization, and exporters real. Only external AI is replaced.
@@ -159,15 +166,48 @@ Tests keep authentication, routing, forms, ORM persistence, ownership filters, d
 - SMTP host, account, password, and `DEFAULT_FROM_EMAIL`
 - Gemini key only when AI extraction/coaching is enabled
 
-WhiteNoise serves fingerprinted static assets, secure cookies/HSTS/HTTPS redirect enable when debug is off, proxy HTTPS headers are supported, database connections are health-checked, and Gunicorn is included for deployment.
+Secure cookies, HSTS, and the HTTPS redirect enable when debug is off, proxy
+HTTPS headers are supported, and database connections are health-checked.
 
-Start the production web process from the repository root with the included `Procfile`, or directly:
+## Deployment (Vercel)
+
+The app is deployed as a single Vercel Function on the Python runtime. Vercel
+detects Django from `manage.py`, resolves the entrypoint from
+`WSGI_APPLICATION`, and runs `collectstatic` during the build, serving the
+collected assets from the CDN. WhiteNoise stays in the dependency set because
+it is what serves static files locally and under `vercel dev`.
+
+Project settings:
+
+- **Root Directory**: `interview_prep`
+- **Python**: 3.12, pinned by `interview_prep/.python-version`
+- **Function**: `interview_prep/wsgi.py`, `maxDuration` 120s (`vercel.json`)
+- **Database**: Neon Postgres via the Vercel Marketplace, which injects
+  `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct)
+
+Settings refuse to boot on Vercel without `DATABASE_URL`, because the SQLite
+fallback lives on a read-only, per-instance filesystem and would silently
+discard every account.
+
+Vercel does not run migrations. Apply them from a workstation against the
+direct endpoint, since a transaction-mode pooler cannot carry DDL reliably:
 
 ```bash
-gunicorn --chdir interview_prep interview_prep.wsgi:application
+vercel env pull interview_prep/.env.local
+cd interview_prep
+DATABASE_URL="$(grep -m1 '^DATABASE_URL_UNPOOLED=' .env.local | cut -d= -f2-)" \
+  python manage.py migrate
 ```
 
-Apply migrations and run `collectstatic --noinput` during each deployment.
+Pushes to `main` build production; every other branch gets a preview URL. The
+`.vercel.app` wildcard is added to `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`
+automatically when `VERCEL` is set, because preview hostnames are generated
+per commit.
+
+Two runtime constraints follow from serverless hosting: nothing may be written
+outside `/tmp`, and no work may outlive the response. Uploads are already
+parsed in memory and exports already stream from `io.BytesIO`, so both hold
+today — keep it that way.
 
 When template utility classes change, rebuild the committed Tailwind asset from `interview_prep/`:
 
@@ -184,6 +224,6 @@ npx --yes tailwindcss@3.4.17 -i static/css/tailwind.input.css -o static/css/tail
 - Uploaded binaries are never stored.
 - Generated exports stream from memory rather than writing personal files to the repository.
 - The `/question/<id>/run/` route returns HTTP 410. The old host subprocess implementation has been removed.
-- Request-time Selenium job scraping remains legacy and should not be part of the core production path.
+- Request-time Selenium job scraping has been removed. It launched headless Chrome inside the request, which cannot run on a serverless runtime and was never an acceptable production path. Restoring job search means calling a job-board API, not driving a browser in-process.
 
 Never commit `.env`, databases, personal documents, generated resumes, logs, browser authentication state, or test artifacts.

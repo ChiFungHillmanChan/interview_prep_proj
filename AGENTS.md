@@ -25,12 +25,12 @@ The Django application lives in `interview_prep/`.
 
 ```bash
 cd interview_prep
-../env/bin/python manage.py check
-../env/bin/python manage.py test -v 2
-../env/bin/python manage.py makemigrations --check --dry-run
+../.venv/bin/python manage.py check
+../.venv/bin/python manage.py test -v 2
+../.venv/bin/python manage.py makemigrations --check --dry-run
 ```
 
-Use the active environment's Python when `../env/bin/python` is unavailable. Do not assume that a global Python has the required dependencies.
+Use the active environment's Python when `../.venv/bin/python` is unavailable. Do not assume that a global Python has the required dependencies.
 
 ## Architecture boundaries
 
@@ -121,7 +121,7 @@ Run the narrow coach tests first when iterating:
 
 ```bash
 cd interview_prep
-../env/bin/python manage.py test prep_app.tests.test_interview_coach -v 2
+../.venv/bin/python manage.py test prep_app.tests.test_interview_coach -v 2
 ```
 
 Then run the full suite before handoff.
