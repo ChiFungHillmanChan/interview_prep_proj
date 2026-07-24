@@ -37,7 +37,10 @@ class InterviewCoachService:
         self, user, profile, target_role: str, job_description: str,
         focus_areas: Iterable[str], language: str | None = None,
     ) -> str:
-        skills = list(user.skill_evidence.values('name', 'self_level', 'evidence'))
+        # Bounded like the memory query below it: _update_skill_assessments
+        # adds a row per newly named skill, so this list grows without limit
+        # over a user's history and every entry lands in every prompt.
+        skills = list(user.skill_evidence.values('name', 'self_level', 'evidence')[:20])
         memory = list(user.career_memory.filter(
             user_confirmed=True, review_status='confirmed'
         ).values('category', 'content', 'confidence')[:12])
@@ -81,7 +84,7 @@ Return JSON only: {{"question": "..."}}
         profile = getattr(user, 'career_profile', None)
         skills = list(user.skill_evidence.values(
             'name', 'self_level', 'evidence', 'assessment_level', 'assessment_confidence'
-        ))
+        )[:20])
         memory = list(user.career_memory.filter(
             user_confirmed=True, review_status='confirmed'
         ).values(
@@ -102,7 +105,7 @@ Known skills: {json.dumps(skills, default=str)}
 Career memory: {json.dumps(memory, default=str)}
 Previous turns: {json.dumps(previous_turns, default=str)}
 Current question: {session.current_question}
-Candidate answer: {answer}
+Candidate answer: {answer[:8000]}
 
 Return valid JSON only with this shape:
 {{

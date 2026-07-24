@@ -111,6 +111,10 @@ class StartInterviewForm(forms.Form):
 class InterviewAnswerForm(forms.Form):
     answer = forms.CharField(
         min_length=10,
+        # Generous for a spoken-style answer (~1300 words). Without a ceiling
+        # the whole body went into the model prompt verbatim and was stored in
+        # full, then re-embedded in every later prompt in the same session.
+        max_length=8000,
         widget=forms.Textarea(attrs={
             'class': FIELD_CLASS,
             'rows': 9,

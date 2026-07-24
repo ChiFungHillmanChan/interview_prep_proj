@@ -183,6 +183,23 @@ class InterviewCoachFlowTests(TestCase):
 
         self.assertFalse(SkillEvidence.objects.filter(user=self.user, name='Kubernetes').exists())
 
+    def test_an_oversized_answer_is_rejected_rather_than_sent_to_the_model(self):
+        """Every other prompt input is bounded; the answer was not.
+
+        DATA_UPLOAD_MAX_MEMORY_SIZE (11MB) was the only ceiling, and the whole
+        body went into the prompt verbatim and was stored in full.
+        """
+        session = InterviewSession.objects.create(
+            user=self.user, target_role='Backend Engineer', current_question='Describe a trade-off.',
+        )
+
+        response = self.client.post(reverse('coach_answer', args=[session.id]), {
+            'answer': 'A' * 200_000,
+        })
+
+        self.assertRedirects(response, reverse('coach_session', args=[session.id]))
+        self.assertFalse(InterviewTurn.objects.filter(session=session).exists())
+
     def test_candidate_cannot_open_another_users_interview(self):
         other_session = InterviewSession.objects.create(
             user=self.other_user,
