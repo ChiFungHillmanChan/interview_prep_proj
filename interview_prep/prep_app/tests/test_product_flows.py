@@ -410,6 +410,22 @@ class StagedInterviewAndPrivacyTests(TestCase):
         self.client.post(reverse('account_delete'), {'password': 'test-pass-123'})
         self.assertFalse(User.objects.filter(id=self.user.id).exists())
 
+    def test_candidate_data_is_not_reachable_through_the_admin(self):
+        """A staff account must not be able to read every user's evidence.
+
+        The default ModelAdmin does no per-owner filtering, so registering
+        these models made one staff credential a full PII breach.
+        """
+        from django.contrib import admin as django_admin
+
+        registered = {model.__name__ for model in django_admin.site._registry}
+        for private in [
+            'CareerMemoryFact', 'CandidateDocument', 'InterviewSession',
+            'InterviewTurn', 'ResumeVersion', 'SkillEvidence',
+            'CareerProfile', 'ReadinessSnapshot',
+        ]:
+            self.assertNotIn(private, registered)
+
     def test_expensive_endpoints_are_rate_limited(self):
         """Each answer is a paid model call, and nothing throttled them.
 

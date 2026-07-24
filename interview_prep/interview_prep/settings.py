@@ -87,7 +87,11 @@ SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=not DEBUG, cast=bool)
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Only trust the forwarded-proto header where a proxy we control actually sets
+# it. Vercel's edge overwrites it before the request reaches the function; on
+# any other host a client could forge it and defeat the HTTPS redirect.
+if ON_VERCEL:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 # Every front-end asset is committed under static/, so scripts and styles are
 # restricted to this origin. Leave blank to use the policy defined in
@@ -222,6 +226,10 @@ EMAIL_HOST_USER = config('HOST_EMAIL', default='')
 EMAIL_HOST_PASSWORD = config('HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'noreply@localhost')
 PASSWORD_RESET_TIMEOUT = 60 * 60
+# Socket timeout for the SMTP send, which happens inside the request. Django
+# defaults this to None, i.e. block indefinitely, which on a serverless
+# function means running to the platform's duration limit.
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 11 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 11 * 1024 * 1024
