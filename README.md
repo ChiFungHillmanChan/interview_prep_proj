@@ -92,6 +92,7 @@ interview_prep_proj/
         ├── resume_views.py
         ├── security_views.py
         ├── models.py
+        ├── auth_backends.py        # username-or-email sign-in
         ├── middleware.py           # Content-Security-Policy header
         ├── services/
         │   ├── ai_client.py        # shared model-call deadline
@@ -269,6 +270,7 @@ npx --yes tailwindcss@3.4.17 -i static/css/tailwind.input.css -o static/css/tail
 ## Security and privacy
 
 - All Career Memory, upload, interview, answer, readiness, and resume routes require authentication and owner-scoped lookups.
+- Sign-in accepts a username or an email address (`prep_app/auth_backends.py`). Because `auth_user.email` carries no unique constraint, an address matching more than one account authenticates nobody, and an exact username match always wins over an email match.
 - State changes use POST and CSRF protection.
 - Raw CV contents, answers, memory, keys, and model responses are not logged.
 - Model JSON is bounded and normalized before persistence.

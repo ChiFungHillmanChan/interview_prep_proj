@@ -91,8 +91,8 @@ The repo contains a legacy CV/job-analysis app and the current evidence-based co
 `models.py`, `urls.py`, and templates but nothing else.
 
 - **Current stack**: `coach_views.py`, `career_views.py`, `resume_views.py`, `security_views.py`,
-  `coach_forms.py`, `middleware.py`, and everything under `services/` except `ai_integration.py` /
-  `resume_exporter.py`.
+  `coach_forms.py`, `middleware.py`, `auth_backends.py`, and everything under `services/` except
+  `ai_integration.py` / `resume_exporter.py`.
 - **Legacy but still routed**: `views.py` (home, auth, job analysis, the coding module)
   plus its `forms.py` and `mock_genai.py`. Keep it working, but put no new coach behavior here.
 - **Legacy and fully dead**: `ai_resume_views.py` (~85 KB, 91 defs) and everything only it imports —
@@ -213,6 +213,11 @@ fallback would silently discard every account. `*.vercel.app` is appended to `AL
   the database (`RateLimitEvent`) rather than a cache, since serverless instances share no memory.
 - `admin.py` registers only `Topic` and `Question`. Candidate-data models are deliberately **not**
   registered — the default ModelAdmin does no per-owner filtering.
+- Sign-in accepts a username *or* an email address via `prep_app/auth_backends.py`
+  (`AUTHENTICATION_BACKENDS`). Two properties there are load-bearing and must survive any edit:
+  `auth_user.email` has no unique constraint, so an ambiguous address authenticates **nobody**
+  rather than the first matching row; and an exact username match always beats an email match, so
+  an account cannot be shadowed by someone registering its username as their own email.
 - Never commit `.env`, `db.sqlite3`, `staticfiles/`, logs, or the personal CVs (`ChiFungHillmanChan.*`)
   sitting untracked in `interview_prep/`. `.vercelignore` re-lists them because CLI deploys ignore
   `.gitignore`.
