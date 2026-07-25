@@ -22,9 +22,16 @@ All Django commands run from `interview_prep/` (this is also the Vercel Root Dir
 cd interview_prep
 ../.venv/bin/python manage.py runserver
 ../.venv/bin/python manage.py check
-../.venv/bin/python manage.py test -v 2
+../.venv/bin/python manage.py test -v 2                          # 54 tests, all must pass
 ../.venv/bin/python manage.py makemigrations --check --dry-run   # must report no drift
 ../.venv/bin/python -m compileall interview_prep prep_app
+../.venv/bin/python manage.py collectstatic --noinput            # required after pulling; see gotchas
+```
+
+Dependency audit — run after touching `requirements.txt`, and expect zero findings:
+
+```bash
+../.venv/bin/python -m pip_audit -r requirements.txt   # pip install pip-audit first
 ```
 
 Narrow test runs while iterating:
@@ -84,7 +91,8 @@ The repo contains a legacy CV/job-analysis app and the current evidence-based co
 `models.py`, `urls.py`, and templates but nothing else.
 
 - **Current stack**: `coach_views.py`, `career_views.py`, `resume_views.py`, `security_views.py`,
-  `coach_forms.py`, and everything under `services/` except `ai_integration.py` / `resume_exporter.py`.
+  `coach_forms.py`, `middleware.py`, and everything under `services/` except `ai_integration.py` /
+  `resume_exporter.py`.
 - **Legacy but still routed**: `views.py` (home, auth, job analysis, the coding module)
   plus its `forms.py` and `mock_genai.py`. Keep it working, but put no new coach behavior here.
 - **Legacy and fully dead**: `ai_resume_views.py` (~85 KB, 91 defs) and everything only it imports —
@@ -116,6 +124,13 @@ Facts from CV and interview sources are always created with `user_confirmed=Fals
 and prompt context. Dedup uses `memory_fingerprint(category, title, content)` (SHA-256 of the
 normalized triple), enforced by a partial unique constraint on `(user, fingerprint)`.
 
+**All three gates have negative regression tests, and that is load-bearing.** Two of them (the
+category half of gate 1, and gate 2's threshold) once had none — both could be deleted outright with
+the whole suite still green, which is how a change that let the model invent candidate claims would
+have shipped unnoticed. If you touch a gate, verify the test still catches it: delete the guard, run
+the suite, confirm it goes red, restore. A gate without a test that fails when it is removed is not
+protected.
+
 ### AI boundary and fallback
 
 Both `services/interview_coach.py` and `services/career_memory.py` own a private `_request_json`
@@ -124,6 +139,13 @@ occurs. Every caller has a deterministic fallback (`_fallback_evaluation`, `_fal
 a Gemini outage degrades quality but never breaks the flow. Model JSON is normalized once at that
 boundary (`_normalize_result`, `normalize_items`) — clamped scores, enum allow-lists, length caps —
 never re-parsed in views or templates.
+
+That guarantee depends on the timeout, and the dependency is easy to miss: **the fallback only runs
+on an exception, never on a hang.** `google-genai` leaves `HttpOptions.timeout` as `None` and passes
+it to httpx, which treats an explicit `None` as *no deadline at all* — so before
+`services/ai_client.request_timeout_ms()` was wired in, a stalled call could not degrade to the
+fallback, it simply ran until the platform killed the invocation. Never construct a
+`genai.Client` without `http_options={'timeout': request_timeout_ms()}`.
 
 Tests disable AI with `@override_settings(INTERVIEW_COACH_USE_AI=False)` or patch a single service
 method. Do not mock Django auth, routing, the ORM, or ownership filters.
@@ -147,6 +169,13 @@ confirmed fact owned by `request.user`, or the save raises `ValidationError`. Ed
 live editor **mutates the underlying `CareerMemoryFact`** into `source_type='manual'` with a new
 fingerprint, which is how user edits become explicit evidence. PDF/DOCX exporters
 (`CareerResumeExporter`) consume the same saved document and stream from `io.BytesIO`.
+
+Because a save rewrites facts as a side effect, **`resume_save` must stay inside one
+`transaction.atomic()`** covering both the fact mutations and the version write, and its `except`
+tuple must keep catching `TypeError`. Without the transaction a rejected save left earlier entries
+already rewritten — with `source_type` flipped from `cv` to `manual`, silently relabelling imported
+evidence as hand-entered — while telling the user the save had failed. That is the one failure mode
+that damages the product's core claim rather than just a request.
 
 ### Serverless constraints
 

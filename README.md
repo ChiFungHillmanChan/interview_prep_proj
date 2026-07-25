@@ -23,7 +23,7 @@ PDF/DOCX CV + manual evidence
 Implemented product capabilities:
 
 - Private user-scoped Career Profiles, skills, memory, interviews, uploads, readiness snapshots, and resume versions
-- PDF/DOCX validation by size, extension, MIME type, parser, and file signature
+- PDF/DOCX validation by size, extension, MIME type, file signature, **decompressed size**, and parser
 - Structured CV extraction for personal details, skills, work experience, projects, education, achievements, certifications, and languages
 - Deterministic conservative extraction when Gemini is unavailable
 - Evidence-excerpt validation, per-user deduplication, and pending-by-default AI/CV memories
@@ -34,7 +34,9 @@ Implemented product capabilities:
 - Complete answer persistence, per-skill assessment, confidence, overall readiness, dimension history, and target-role gaps
 - Session deletion with an explicit choice about session-generated memories
 - Confirmed-only, multi-version resume drafting with 0–100 evidence coverage, missing-requirement questions, live editing, and PDF/DOCX export
-- CV-import deletion, complete JSON data export, password-protected account deletion, and working password reset email flow
+- CV-import deletion, complete JSON data export, and password-protected account deletion
+- Rate limiting on the endpoints that cost money or send mail (AI calls, CV import, sign-up, password reset)
+- All front-end assets self-hosted behind a Content-Security-Policy — nothing loads from a CDN
 - Safe local AI fallbacks and strict model-output normalization
 - Host code execution disabled until a genuinely isolated sandbox exists
 
@@ -90,11 +92,14 @@ interview_prep_proj/
         ├── resume_views.py
         ├── security_views.py
         ├── models.py
+        ├── middleware.py           # Content-Security-Policy header
         ├── services/
+        │   ├── ai_client.py        # shared model-call deadline
         │   ├── career_memory.py
         │   ├── document_parser.py
         │   ├── interview_coach.py
         │   ├── interview_plan.py
+        │   ├── rate_limit.py       # DB-backed throttling
         │   └── resume_builder.py
         ├── templates/prep_app/
         └── tests/
@@ -115,6 +120,7 @@ pip install -r interview_prep/requirements.txt
 cp interview_prep/.env.example interview_prep/.env
 cd interview_prep
 python manage.py migrate
+python manage.py collectstatic --noinput   # templates resolve assets via {% static %}
 python manage.py runserver
 ```
 
@@ -152,7 +158,19 @@ CSRF_TRUSTED_ORIGINS='https://aceinterview.example.com' \
 ../.venv/bin/python manage.py check --deploy
 ```
 
+Dependency audit — expect zero findings:
+
+```bash
+pip install pip-audit && ../.venv/bin/python -m pip_audit -r requirements.txt
+```
+
 Tests keep authentication, routing, forms, ORM persistence, ownership filters, document parsing, serialization, and exporters real. Only external AI is replaced.
+
+A test that does not fail when you remove the thing it covers is not a test.
+The three grounding gates in particular are pinned by negative cases, and two
+of them previously were not — the whole suite stayed green with the guard
+deleted. When you add or change a guard, delete it, run the suite, confirm it
+goes red, then restore.
 
 ## Production configuration
 
@@ -258,5 +276,17 @@ npx --yes tailwindcss@3.4.17 -i static/css/tailwind.input.css -o static/css/tail
 - Generated exports stream from memory rather than writing personal files to the repository.
 - The `/question/<id>/run/` route returns HTTP 410. The old host subprocess implementation has been removed.
 - Request-time Selenium job scraping has been removed. It launched headless Chrome inside the request, which cannot run on a serverless runtime and was never an acceptable production path. Restoring job search means calling a job-board API, not driving a browser in-process.
+- Uploads are bounded on decompressed size as well as upload size. A DOCX is a zip archive, so the 10 MB upload limit alone bounds only the compressed bytes — repetitive XML compresses at roughly 1000:1, and a sub-1 MB file that passed every other check could expand to gigabytes during parsing.
+- The Django admin registers only `Topic` and `Question`. Candidate data is deliberately absent: the default `ModelAdmin` does no per-owner filtering, so registering it would let one staff credential read every user's CV text and interview answers.
+- Every model call carries an explicit deadline and runs outside the database transaction, so a slow provider cannot pin a pooled Postgres connection for the length of an HTTP round trip.
+- Dependencies are audited with `pip-audit` and currently report zero known vulnerabilities.
+
+### Known limitations
+
+Honest about what is *not* solved:
+
+- **Password reset does not deliver in production.** The flow is wired and rate limited, but outbound email is parked on purpose — see the "Deferred" section at the top of `TODO.md`. The supported way to change a password is the signed-in form at `/your-profile/`.
+- **The CSP still allows `'unsafe-inline'` and `'unsafe-eval'` for scripts.** Several templates carry inline blocks and Alpine evaluates its directives with `new Function`. The origin restriction — the part that stops a third party executing here — is in force; tightening the rest means nonce-ing every inline block and moving to Alpine's CSP build.
+- **Registration is still distinguishable.** The error message no longer confirms whether an address is registered, but the response differs between success and failure, so it remains an oracle to anyone willing to script it. Rate limiting is what makes that impractical rather than the message.
 
 Never commit `.env`, databases, personal documents, generated resumes, logs, browser authentication state, or test artifacts.
